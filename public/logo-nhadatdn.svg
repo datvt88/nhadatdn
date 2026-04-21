@@ -1,0 +1,12 @@
+<svg width="420" height="86" viewBox="0 0 420 86" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="NhadatDN">
+  <defs>
+    <linearGradient id="brandGreen" x1="266" y1="18" x2="389" y2="66" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#28BDBF"/>
+      <stop offset="1" stop-color="#209799"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="14" width="52" height="52" rx="14" fill="#28BDBF"/>
+  <path d="M30 27L18 38.2H20.8V53H27.6V45.2H32.4V53H39.2V38.2H42L30 27Z" fill="white"/>
+  <text x="72" y="57" font-family="Montserrat, Segoe UI, Arial, sans-serif" font-size="50" font-weight="800" letter-spacing="-1.2" fill="#0F172A">Nhadat</text>
+  <text x="260" y="57" font-family="Montserrat, Segoe UI, Arial, sans-serif" font-size="50" font-weight="800" letter-spacing="-1.3" fill="url(#brandGreen)">DN</text>
+</svg>
