@@ -119,6 +119,18 @@ export function HeaderNav() {
             {item.label}
           </Link>
         ))}
+        {user ? (
+          <button
+            type="button"
+            onClick={() => {
+              writeAuthUser(null);
+              setUser(null);
+            }}
+            className="whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-700 hover:border-rose-300"
+          >
+            Đăng xuất
+          </button>
+        ) : null}
       </nav>
     </header>
   );
