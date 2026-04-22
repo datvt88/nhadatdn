@@ -53,8 +53,8 @@ function readNextPath(): string | null {
 export default function LoginPage() {
   const router = useRouter();
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
-  const [identifier, setIdentifier] = useState('testuser@nhadatdn.local');
-  const [password, setPassword] = useState('Test@123456');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
@@ -259,13 +259,25 @@ export default function LoginPage() {
       <h1 className="text-2xl font-bold text-slate-900">Đăng nhập</h1>
       <p className="mt-2 text-sm text-slate-600">Đăng nhập bằng email, số điện thoại hoặc Google.</p>
       <div className="mt-6 space-y-4">
-        <input value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="Email hoặc số điện thoại" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        <input
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
+          placeholder="Email hoặc số điện thoại"
+          autoComplete="username"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
         <button onClick={() => void onLogin()} disabled={loading} className="rounded-lg bg-sky-600 px-4 py-2 font-semibold text-white disabled:opacity-60">
           {loading ? 'Đang xử lý...' : 'Đăng nhập'}
         </button>
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+        <div className="hidden rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 sm:block">
           <p className="font-semibold">Đăng nhập nhanh với Google</p>
           {googleEnabled && googleClientId ? (
             <div className="mt-3">
