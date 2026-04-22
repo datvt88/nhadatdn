@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Mua bán nhà đất Đà Nẵng',
-  description: 'Tìm kiếm bất động sản Đà Nẵng nhanh và cập nhật mới nhất',
+  description: 'Tìm kiếm bất động sản Đà Nẵng nhanh chóng và luôn được cập nhật mới nhất',
   keywords: ['nhà đất Đà Nẵng', 'mua bán nhà đất Đà Nẵng', 'bất động sản Đà Nẵng'],
   alternates: {
     canonical: '/',
