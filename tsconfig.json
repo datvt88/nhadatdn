@@ -1,5 +1,5 @@
-{
-  "extends": "../../tsconfig.base.json",
+﻿{
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": [
       "dom",
@@ -31,3 +31,4 @@
     "node_modules"
   ]
 }
+
