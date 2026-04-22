@@ -62,7 +62,6 @@ export default function LoginPage() {
   const [googleReady, setGoogleReady] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleHint, setGoogleHint] = useState('');
-  const [showManualLogin, setShowManualLogin] = useState(false);
 
   useEffect(() => {
     const existingUser = readAuthUser();
@@ -140,13 +139,15 @@ export default function LoginPage() {
       });
 
       target.innerHTML = '';
+      const buttonWidth =
+        typeof window !== 'undefined' ? Math.min(320, Math.max(240, window.innerWidth - 48)) : 320;
       googleId.renderButton(target, {
         type: 'standard',
         theme: 'outline',
         size: 'large',
         shape: 'pill',
         text: 'continue_with',
-        width: 320,
+        width: buttonWidth,
         locale: 'vi',
       });
       setGoogleReady(true);
@@ -289,7 +290,7 @@ export default function LoginPage() {
           {loading ? 'Đang xử lý...' : 'Đăng nhập'}
         </button>
 
-        <div className="hidden rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 sm:block">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
           <p className="font-semibold">Đăng nhập nhanh với Google</p>
           {googleEnabled && googleClientId ? (
             <div className="mt-3">
