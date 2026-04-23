@@ -203,7 +203,7 @@ export function HomeRealtime({
 
       let result = await runSearch(keywordCandidates[0] ?? '');
       if (result.saleItems.length === 0 && result.rentItems.length === 0 && keywordCandidates.length > 1) {
-        result = await runSearch(keywordCandidates[1]);
+        result = await runSearch(keywordCandidates[1] ?? '');
       }
       setSaleListings(result.saleItems);
       setRentListings(result.rentItems);

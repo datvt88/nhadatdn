@@ -9,6 +9,7 @@ import { fetchJsonOr } from '../../../../lib/api';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '../../../../lib/listing-labels';
 import { formatAreaM2, formatCurrencyVnd } from '../../../../lib/listing-presenter';
 import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '../../../../lib/listing-route';
+import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '../../../../lib/seo';
 import type { ListingItem } from '../../../../lib/types';
 
 export const revalidate = 60;
@@ -88,7 +89,7 @@ function buildSeoDescription(detail: ListingDetail): string {
   const location = toLocation(detail);
   const summary = (detail.description ?? '').replace(/\s+/g, ' ').trim();
   const prefix = `${detail.title}. Giá ${formatCurrencyVnd(Number(detail.price))}, diện tích ${formatAreaM2(Number(detail.area))}, ${location}.`;
-  return `${prefix} ${summary}`.slice(0, 300);
+  return normalizeSeoText(`${prefix} ${summary}`).slice(0, 300);
 }
 
 function formatHouseDirection(direction?: string): string {
@@ -156,16 +157,28 @@ export async function generateMetadata({ params }: { params: { dealType: string;
   const canonicalDealType = resolveDealType(listing.title, dealTypeHint);
   const seoCategoryLabel = canonicalDealType === 'cho-thue' ? 'Cho thuê nhà đất Đà Nẵng' : 'Mua bán nhà đất Đà Nẵng';
   const path = buildListingPath({ slug: listing.slug, title: listing.title, district: districtName(listing), ...(wardName ? { ward: wardName } : {}), ...(dealTypeHint ? { categoryHint: dealTypeHint } : {}) });
+  const absoluteUrl = toAbsoluteUrl(path);
+  const districtLabel = districtName(listing);
+  const title = normalizeSeoText(`${listing.title} - ${districtLabel} | ${seoCategoryLabel}`);
+  const keywordPool = [
+    'nhà đất Đà Nẵng',
+    seoCategoryLabel.toLowerCase(),
+    districtLabel,
+    wardName ?? '',
+    listing.propertyType ?? '',
+    normalizeSeoText(listing.title),
+  ].filter(Boolean);
 
   return {
-    title: `${listing.title} | ${seoCategoryLabel}`,
+    title,
     description,
+    keywords: keywordPool,
     alternates: { canonical: path },
     openGraph: {
       type: 'article',
-      title: listing.title,
+      title,
       description,
-      url: path,
+      url: absoluteUrl,
       images: images.slice(0, 3).map((url) => ({ url })),
     },
     twitter: {
@@ -198,7 +211,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
 
   const dealType = resolveDealType(listing.title, (listing.dealType ?? listing.DealType ?? '').toString());
   const gallery = resolveImages(listing);
-  const descriptionLines = (listing.description ?? 'Thông tin đang cập nhật...').split('\n').map((line) => line.trim()).filter(Boolean);
+  const descriptionText = (listing.description ?? 'Thông tin đang cập nhật...').replace(/\r\n?/g, '\n').trim();
   const mapQuery = buildMapQuery(listing);
   const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&hl=vi&z=16&output=embed`;
   const mapExternalUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
@@ -215,23 +228,40 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const showVipBadge = packageBadgeText !== '';
   const categoryLabel = canonicalDealType === 'cho-thue' ? 'Cho thuê nhà đất' : 'Mua bán nhà đất';
   const locationLabel = districtName(listing);
+  const siteUrl = getSiteUrl();
+  const listingAbsoluteUrl = toAbsoluteUrl(path);
 
-  const jsonLd = {
+  const jsonLdListing = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
     name: listing.title,
     description: buildSeoDescription(listing),
-    url: `https://nhadatdn.net${path}`,
+    url: listingAbsoluteUrl,
     ...(gallery.length > 0 ? { image: gallery } : {}),
     datePosted: listing.created_at,
     offers: { '@type': 'Offer', priceCurrency: 'VND', price: Number(listing.price), availability: 'https://schema.org/InStock' },
     address: { '@type': 'PostalAddress', streetAddress: listing.address, addressLocality: toLocation(listing) },
   };
+  const jsonLdBreadcrumb = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'NhadatDN', item: siteUrl },
+      { '@type': 'ListItem', position: 2, name: categoryLabel, item: toAbsoluteUrl(canonicalCategoryPath) },
+      { '@type': 'ListItem', position: 3, name: locationLabel, item: toAbsoluteUrl(`${canonicalCategoryPath}/${params.location}`) },
+      { '@type': 'ListItem', position: 4, name: listing.title, item: listingAbsoluteUrl },
+    ],
+  };
 
   return (
     <main className="min-h-screen bg-[#f2f3f5] pb-12">
       <HeaderNav />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify([jsonLdListing, jsonLdBreadcrumb]).replace(/</g, '\\u003c'),
+        }}
+      />
 
       <article className="mx-auto w-full max-w-[1220px] px-3 py-4 sm:px-5">
         <p className="mb-2 flex flex-wrap items-center gap-1 text-xs text-slate-500">
@@ -277,7 +307,9 @@ export default async function ListingDetailPage({ params }: { params: { dealType
 
             <section className="rounded-xl border border-slate-100 p-3">
               <h2 className="mb-3 text-base font-bold text-slate-900">Mô tả chi tiết</h2>
-              <ul className="space-y-1 text-sm leading-6 text-slate-700">{descriptionLines.map((line) => (<li key={line}>- {line}</li>))}</ul>
+              <p className="whitespace-pre-line break-words text-sm leading-6 text-slate-700">
+                {descriptionText || 'Thông tin đang cập nhật...'}
+              </p>
             </section>
 
             <section className="rounded-xl border border-slate-100 p-3">
