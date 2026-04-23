@@ -130,9 +130,7 @@ export function authHeaders(user: AuthUser | null | undefined): Record<string, s
   }
   const headers: Record<string, string> = {};
   const token = typeof user.sessionToken === 'string' ? user.sessionToken.trim() : '';
-  const sessionCookie = readCookie('nhadatdn_session').trim();
-  // Prefer cookie-based session to avoid stale local token causing "invalid session".
-  if (!sessionCookie && token) {
+  if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
   const csrf = readCookie('nhadatdn_csrf').trim();
