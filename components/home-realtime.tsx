@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ListingShowcase } from './listing-showcase';
+import { API_BASE } from '../lib/api';
 import type { ListingItem, SearchResponse } from '../lib/types';
 
 type WardOption = { name: string; slug: string };
@@ -17,7 +18,6 @@ type KeywordSuggestion = {
 };
 type PropertyTypeOption = { value: string; label: string };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3002/api';
 const LISTING_SYNC_KEY = 'nhadatdn.listings.updatedAt';
 const LISTING_SYNC_EVENT = 'nhadatdn-listings-updated';
 const PROPERTY_TYPE_OPTIONS: PropertyTypeOption[] = [
@@ -77,6 +77,20 @@ function buildSearchParams({
   return query;
 }
 
+function resolveDistrictSlug(value: string, districts: DistrictOption[]): string {
+  const raw = value.trim();
+  if (!raw) return '';
+  if (districts.some((item) => item.slug === raw)) return raw;
+
+  const normalizedRaw = normalizeVietnameseKeyword(raw);
+  const match = districts.find((item) => {
+    if (!item?.slug) return false;
+    if (normalizeVietnameseKeyword(item.slug) === normalizedRaw) return true;
+    return normalizeVietnameseKeyword(item.name) === normalizedRaw;
+  });
+  return match?.slug ?? raw;
+}
+
 export function HomeRealtime({
   initialSaleListings,
   initialRentListings,
@@ -105,6 +119,7 @@ export function HomeRealtime({
     () => Boolean(priceMin || priceMax || areaMin || areaMax || propertyType),
     [areaMax, areaMin, priceMax, priceMin, propertyType],
   );
+  const districtSlug = useMemo(() => resolveDistrictSlug(district, districts), [district, districts]);
 
   const keywordSuggestions = useMemo(() => {
     const dictionary = new Map<string, KeywordSuggestion>();
@@ -154,8 +169,8 @@ export function HomeRealtime({
     const controller = new AbortController();
     fetchAbortRef.current = controller;
 
-    const saleParams = buildSearchParams({ keyword, district, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
-    const rentParams = buildSearchParams({ keyword, district, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
+    const saleParams = buildSearchParams({ keyword, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
+    const rentParams = buildSearchParams({ keyword, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
 
     setLoading(true);
     try {
@@ -180,7 +195,7 @@ export function HomeRealtime({
     } finally {
       setLoading(false);
     }
-  }, [areaMax, areaMin, district, keyword, priceMax, priceMin, propertyType]);
+  }, [areaMax, areaMin, districtSlug, keyword, priceMax, priceMin, propertyType]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
