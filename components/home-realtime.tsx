@@ -91,6 +91,20 @@ function resolveDistrictSlug(value: string, districts: DistrictOption[]): string
   return match?.slug ?? raw;
 }
 
+function uniqueKeywords(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = normalizeVietnameseKeyword(trimmed);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 export function HomeRealtime({
   initialSaleListings,
   initialRentListings,
@@ -168,29 +182,35 @@ export function HomeRealtime({
     fetchAbortRef.current?.abort();
     const controller = new AbortController();
     fetchAbortRef.current = controller;
-
-    const saleParams = buildSearchParams({ keyword, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
-    const rentParams = buildSearchParams({ keyword, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
+    const keywordCandidates = uniqueKeywords([keyword, normalizeVietnameseKeyword(keyword)]);
 
     setLoading(true);
     try {
-      const [saleRes, rentRes] = await Promise.all([
-        fetch(`${API_BASE}/search?${saleParams.toString()}`, { cache: 'no-store', signal: controller.signal }),
-        fetch(`${API_BASE}/search?${rentParams.toString()}`, { cache: 'no-store', signal: controller.signal }),
-      ]);
+      const runSearch = async (kw: string) => {
+        const saleParams = buildSearchParams({ keyword: kw, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
+        const rentParams = buildSearchParams({ keyword: kw, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
+        const [saleRes, rentRes] = await Promise.all([
+          fetch(`${API_BASE}/search?${saleParams.toString()}`, { cache: 'no-store', signal: controller.signal }),
+          fetch(`${API_BASE}/search?${rentParams.toString()}`, { cache: 'no-store', signal: controller.signal }),
+        ]);
+        const saleItems = saleRes.ok ? (((await saleRes.json()) as SearchResponse).items ?? []) : [];
+        const rentItems = rentRes.ok ? (((await rentRes.json()) as SearchResponse).items ?? []) : [];
+        return {
+          saleItems: Array.isArray(saleItems) ? saleItems : [],
+          rentItems: Array.isArray(rentItems) ? rentItems : [],
+        };
+      };
 
-      if (saleRes.ok) {
-        const saleData = (await saleRes.json()) as SearchResponse;
-        setSaleListings(Array.isArray(saleData.items) ? saleData.items : []);
+      let result = await runSearch(keywordCandidates[0] ?? '');
+      if (result.saleItems.length === 0 && result.rentItems.length === 0 && keywordCandidates.length > 1) {
+        result = await runSearch(keywordCandidates[1]);
       }
-
-      if (rentRes.ok) {
-        const rentData = (await rentRes.json()) as SearchResponse;
-        setRentListings(Array.isArray(rentData.items) ? rentData.items : []);
-      }
+      setSaleListings(result.saleItems);
+      setRentListings(result.rentItems);
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        // keep previous UI state on transient network errors
+        setSaleListings([]);
+        setRentListings([]);
       }
     } finally {
       setLoading(false);
