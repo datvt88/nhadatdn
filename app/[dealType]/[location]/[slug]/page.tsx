@@ -211,7 +211,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
 
   const dealType = resolveDealType(listing.title, (listing.dealType ?? listing.DealType ?? '').toString());
   const gallery = resolveImages(listing);
-  const descriptionText = (listing.description ?? 'Thông tin đang cập nhật...').replace(/\r\n?/g, '\n').trim();
+  const descriptionText = (listing.description ?? '').replace(/\r\n?/g, '\n');
   const mapQuery = buildMapQuery(listing);
   const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&hl=vi&z=16&output=embed`;
   const mapExternalUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
@@ -308,7 +308,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
             <section className="rounded-xl border border-slate-100 p-3">
               <h2 className="mb-3 text-base font-bold text-slate-900">Mô tả chi tiết</h2>
               <p className="whitespace-pre-line break-words text-sm leading-6 text-slate-700">
-                {descriptionText || 'Thông tin đang cập nhật...'}
+                {descriptionText.trim() ? descriptionText : 'Thông tin đang cập nhật...'}
               </p>
             </section>
 

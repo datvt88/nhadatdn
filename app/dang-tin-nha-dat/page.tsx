@@ -131,6 +131,21 @@ function fieldClass(errors: FieldErrors, key: FieldKey, extra = ''): string {
   return `${base} ${tone} ${extra}`.trim();
 }
 
+async function fetchApiWithFallback(path: string, init?: RequestInit): Promise<Response> {
+  const primary = `${API_BASE}${path}`;
+  const canFallback = typeof window !== 'undefined' && !API_BASE.startsWith('/api');
+
+  try {
+    const res = await fetch(primary, init);
+    if (!canFallback || res.ok) return res;
+    if (res.status !== 404 && res.status < 500) return res;
+  } catch {
+    if (!canFallback) throw new Error('request failed');
+  }
+
+  return fetch(`/api${path}`, init);
+}
+
 function formatTyValue(value: number): string {
   return `${value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d*[1-9])0$/, '$1')} Tỷ`;
 }
@@ -154,8 +169,8 @@ function mapServerErrorToField(message: string): FieldErrors {
 export default function PostListingDanangPage() {
   const [status, setStatus] = useState<{ tone: StatusTone; message: string } | null>(null);
   const [user, setUser] = useState<AuthUser | null>(() => readAuthUser());
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
+  const [identifier, setIdentifier] = useState('testuser@nhadatdn.local');
+  const [password, setPassword] = useState('Test@123456');
   const [packageType, setPackageType] = useState<'FREE' | 'NORMAL' | 'VIP'>('FREE');
   const [dealType, setDealType] = useState<'can-ban' | 'can-mua' | 'cho-thue'>('can-ban');
   const [houseDirection, setHouseDirection] = useState('');
@@ -258,7 +273,7 @@ export default function PostListingDanangPage() {
       try {
         setAddressLoading(true);
         const query = encodeURIComponent(keyword);
-        const res = await fetch(`${API_BASE}/locations/address-suggest?q=${query}&limit=6`, { cache: 'no-store' });
+        const res = await fetchApiWithFallback(`/locations/address-suggest?q=${query}&limit=6`, { cache: 'no-store' });
         if (!res.ok) {
           if (active) setAddressSuggestions([]);
           return;
@@ -321,12 +336,20 @@ export default function PostListingDanangPage() {
     incoming.forEach((file) => form.append('images', file));
 
     setUploading(true);
-    const res = await fetch(`${API_BASE}/uploads/images`, {
-      method: 'POST',
-      headers: authHeaders(user),
-      credentials: 'include',
-      body: form,
-    });
+    let res: Response;
+    try {
+      res = await fetchApiWithFallback('/uploads/images', {
+        method: 'POST',
+        headers: authHeaders(user),
+        credentials: 'include',
+        body: form,
+      });
+    } catch {
+      setUploading(false);
+      setFieldErrors((prev) => ({ ...prev, images: 'Không kết nối được dịch vụ upload ảnh.' }));
+      setStatus({ tone: 'error', message: 'Upload ảnh thất bại: không kết nối được backend.' });
+      return;
+    }
     setUploading(false);
 
     const payload = (await res.json().catch(() => ({}))) as UploadResult & { error?: string };
@@ -379,7 +402,7 @@ export default function PostListingDanangPage() {
     }
 
     const title = String(formData.get('title') ?? '').trim();
-    const description = String(formData.get('description') ?? '').trim();
+    const description = String(formData.get('description') ?? '');
     const area = parsePositiveDecimal(String(formData.get('area') ?? ''));
     const price = parsePositiveDecimal(priceInput);
     const bedrooms = parseNonNegativeInt(String(formData.get('bedrooms') ?? ''));
