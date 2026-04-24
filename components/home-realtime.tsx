@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ListingShowcase } from './listing-showcase';
 import { API_BASE } from '../lib/api';
 import type { ListingItem, SearchResponse } from '../lib/types';
@@ -18,8 +18,6 @@ type KeywordSuggestion = {
 };
 type PropertyTypeOption = { value: string; label: string };
 
-const LISTING_SYNC_KEY = 'nhadatdn.listings.updatedAt';
-const LISTING_SYNC_EVENT = 'nhadatdn-listings-updated';
 const PROPERTY_TYPE_OPTIONS: PropertyTypeOption[] = [
   { value: '', label: 'Tất cả loại hình' },
   { value: 'Nhà mặt tiền', label: 'Nhà mặt tiền' },
@@ -126,9 +124,6 @@ export function HomeRealtime({
   const [propertyType, setPropertyType] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const refreshTimerRef = useRef<number | null>(null);
-  const fetchAbortRef = useRef<AbortController | null>(null);
-
   const hasExtraFilters = useMemo(
     () => Boolean(priceMin || priceMax || areaMin || areaMax || propertyType),
     [areaMax, areaMin, priceMax, priceMin, propertyType],
@@ -157,7 +152,7 @@ export function HomeRealtime({
     }
     const all = Array.from(dictionary.values());
     const q = normalizeVietnameseKeyword(keyword);
-    if (!q) return all.slice(0, 12);
+    if (!q) return [];
     return all
       .filter((row) => normalizeVietnameseKeyword(row.label).includes(q))
       .slice(0, 12);
@@ -179,9 +174,6 @@ export function HomeRealtime({
   }, [initialDistricts]);
 
   const fetchListings = useCallback(async () => {
-    fetchAbortRef.current?.abort();
-    const controller = new AbortController();
-    fetchAbortRef.current = controller;
     const keywordCandidates = uniqueKeywords([keyword, normalizeVietnameseKeyword(keyword)]);
 
     setLoading(true);
@@ -190,8 +182,8 @@ export function HomeRealtime({
         const saleParams = buildSearchParams({ keyword: kw, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
         const rentParams = buildSearchParams({ keyword: kw, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
         const [saleRes, rentRes] = await Promise.all([
-          fetch(`${API_BASE}/search?${saleParams.toString()}`, { cache: 'no-store', signal: controller.signal }),
-          fetch(`${API_BASE}/search?${rentParams.toString()}`, { cache: 'no-store', signal: controller.signal }),
+          fetch(`${API_BASE}/search?${saleParams.toString()}`, { cache: 'no-store' }),
+          fetch(`${API_BASE}/search?${rentParams.toString()}`, { cache: 'no-store' }),
         ]);
         const saleItems = saleRes.ok ? (((await saleRes.json()) as SearchResponse).items ?? []) : [];
         const rentItems = rentRes.ok ? (((await rentRes.json()) as SearchResponse).items ?? []) : [];
@@ -207,71 +199,17 @@ export function HomeRealtime({
       }
       setSaleListings(result.saleItems);
       setRentListings(result.rentItems);
-    } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
-        setSaleListings([]);
-        setRentListings([]);
-      }
+    } catch {
+      setSaleListings([]);
+      setRentListings([]);
     } finally {
       setLoading(false);
     }
   }, [areaMax, areaMin, districtSlug, keyword, priceMax, priceMin, propertyType]);
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void fetchListings();
-    }, 150);
-
-    return () => window.clearTimeout(timeout);
-  }, [fetchListings]);
-
-  useEffect(() => {
-    const scheduleRefresh = () => {
-      if (refreshTimerRef.current) {
-        window.clearInterval(refreshTimerRef.current);
-      }
-      refreshTimerRef.current = window.setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          void fetchListings();
-        }
-      }, 30000);
-    };
-
-    scheduleRefresh();
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void fetchListings();
-      }
-    };
-
-    const onStorage = (event: StorageEvent) => {
-      if (!event.key || event.key === LISTING_SYNC_KEY) {
-        void fetchListings();
-      }
-    };
-
-    const onListingsUpdated = () => {
-      void fetchListings();
-    };
-
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('focus', onListingsUpdated);
-    window.addEventListener('storage', onStorage);
-    window.addEventListener(LISTING_SYNC_EVENT, onListingsUpdated);
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', onListingsUpdated);
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener(LISTING_SYNC_EVENT, onListingsUpdated);
-      if (refreshTimerRef.current) {
-        window.clearInterval(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
-      fetchAbortRef.current?.abort();
-      fetchAbortRef.current = null;
-    };
+  const onSubmitFilters = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void fetchListings();
   }, [fetchListings]);
 
   return (
@@ -286,7 +224,8 @@ export function HomeRealtime({
           </p>
         </header>
 
-        <div className="mx-auto mt-6 grid w-full max-w-6xl grid-cols-1 gap-2.5 md:mt-7 md:grid-cols-[1fr_240px_auto] md:gap-3">
+        <form className="mx-auto mt-6 w-full max-w-6xl" onSubmit={onSubmitFilters}>
+        <div className="grid grid-cols-1 gap-2.5 md:mt-1 md:grid-cols-[1fr_240px_auto] md:gap-3">
           <label className="group flex h-12 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 shadow-sm transition focus-within:border-[var(--brand-primary)] sm:h-14 sm:px-5">
             <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[var(--brand-primary)]" aria-hidden="true">
               <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
@@ -316,8 +255,7 @@ export function HomeRealtime({
 
           <button
             className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--brand-primary)] px-6 text-base font-bold text-white shadow-md transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-70 sm:h-14 sm:px-8 sm:text-lg md:min-w-[96px]"
-            type="button"
-            onClick={() => void fetchListings()}
+            type="submit"
             disabled={loading}
           >
             {loading ? 'Đang lọc...' : 'Lọc'}
@@ -361,8 +299,9 @@ export function HomeRealtime({
             ))}
           </select>
         </div>
+        </form>
 
-        {hasExtraFilters ? <p className="mt-3 text-center text-sm text-slate-500">Đang áp dụng bộ lọc nâng cao realtime.</p> : null}
+        {hasExtraFilters ? <p className="mt-3 text-center text-sm text-slate-500">Đang áp dụng bộ lọc nâng cao.</p> : null}
 
       </section>
 
