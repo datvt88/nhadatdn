@@ -1,16 +1,16 @@
 ﻿import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { HeaderNav } from '../../../../components/header-nav';
-import { ListingDetailActions } from '../../../../components/listing-detail-actions';
-import { ListingImageGallery } from '../../../../components/listing-image-gallery';
-import { SellerRatingPanel } from '../../../../components/seller-rating-panel';
-import { fetchJsonOr } from '../../../../lib/api';
-import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '../../../../lib/listing-labels';
-import { formatAreaM2, formatCurrencyVnd } from '../../../../lib/listing-presenter';
-import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '../../../../lib/listing-route';
-import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '../../../../lib/seo';
-import type { ListingItem } from '../../../../lib/types';
+import { HeaderNav } from '@/components/header-nav';
+import { ListingDetailActions } from '@/components/listing-detail-actions';
+import { ListingImageGallery } from '@/components/listing-image-gallery';
+import { SellerRatingPanel } from '@/components/seller-rating-panel';
+import { fetchJsonOr } from '@/lib/api';
+import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '@/lib/listing-labels';
+import { formatAreaM2, formatCurrencyVnd } from '@/lib/listing-presenter';
+import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '@/lib/listing-route';
+import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '@/lib/seo';
+import type { ListingItem } from '@/lib/types';
 
 export const revalidate = 60;
 export const dynamic = 'force-dynamic';
