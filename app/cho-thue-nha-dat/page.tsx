@@ -30,8 +30,8 @@ export default async function RentCategoryPage({
   const posterName = String(searchParams?.posterName ?? '').trim();
   const hasPosterFilter = /^\d+$/.test(posterId);
   const endpoint = hasPosterFilter
-    ? `/search?city=da-nang&pageSize=24&dealType=cho-thue&posterId=${encodeURIComponent(posterId)}`
-    : '/search?city=da-nang&pageSize=24&dealType=cho-thue';
+    ? `/search?city=da-nang&pageSize=20&dealType=cho-thue&posterId=${encodeURIComponent(posterId)}`
+    : '/search?city=da-nang&pageSize=20&dealType=cho-thue';
   const payload = await fetchJsonOr<SearchResponse>(
     endpoint,
     { took: 0, total: 0, items: [] },
@@ -62,7 +62,7 @@ export default async function RentCategoryPage({
         </header>
 
         <div className="mt-6">
-          <SearchListingFeed initial={payload} initialQuery={{ city: 'da-nang', pageSize: 24, dealType: 'cho-thue', ...(hasPosterFilter ? { posterId } : {}) }} />
+          <SearchListingFeed initial={payload} initialQuery={{ city: 'da-nang', pageSize: 20, dealType: 'cho-thue', ...(hasPosterFilter ? { posterId } : {}) }} mode="page" />
         </div>
       </section>
     </main>
