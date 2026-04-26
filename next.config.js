@@ -1,6 +1,25 @@
 /** @type {import('next').NextConfig} */
-const apiProxyOrigin = process.env.API_PROXY_ORIGIN || 'http://public-api:3002';
-const apiProxyBasePath = process.env.API_PROXY_BASE_PATH || '/api';
+function trimTrailingSlash(value) {
+  return String(value || '').replace(/\/+$/, '');
+}
+
+function parseAbsoluteApiBase(raw) {
+  if (!raw || !/^https?:\/\//i.test(raw)) return null;
+  try {
+    const parsed = new URL(raw);
+    return {
+      origin: parsed.origin,
+      pathname: trimTrailingSlash(parsed.pathname || ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const publicApiBase = process.env.NEXT_PUBLIC_API_BASE || '/api';
+const parsedPublicApiBase = parseAbsoluteApiBase(publicApiBase);
+const apiProxyOrigin = trimTrailingSlash(process.env.API_PROXY_ORIGIN || parsedPublicApiBase?.origin || 'http://public-api:3002');
+const apiProxyBasePath = trimTrailingSlash(process.env.API_PROXY_BASE_PATH || parsedPublicApiBase?.pathname || '/api') || '/api';
 const isProduction = process.env.NODE_ENV === 'production';
 
 const cspConnectSrcAllowlist = new Set([

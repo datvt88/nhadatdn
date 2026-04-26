@@ -1,14 +1,43 @@
-﻿const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api';
+const PUBLIC_API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? '/api').trim();
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+function deriveSiteOrigin(): string | null {
+  const explicitSite = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicitSite && isAbsoluteHttpUrl(explicitSite)) {
+    return trimTrailingSlash(explicitSite);
+  }
+
+  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() || process.env.VERCEL_URL?.trim();
+  if (!vercelHost) return null;
+  const normalized = vercelHost.startsWith('http://') || vercelHost.startsWith('https://') ? vercelHost : `https://${vercelHost}`;
+  return trimTrailingSlash(normalized);
+}
 
 function deriveServerApiBase(publicApiBase: string): string {
-  const explicitServerBase = process.env.API_BASE_SERVER ?? process.env.INTERNAL_API_BASE;
-  if (explicitServerBase) return explicitServerBase;
+  const explicitServerBase = process.env.API_BASE_SERVER?.trim() || process.env.INTERNAL_API_BASE?.trim();
+  if (explicitServerBase) return trimTrailingSlash(explicitServerBase);
 
-  // In Docker, "localhost" points to the frontend container itself.
-  // Fallback to host.docker.internal so SSR can reach mapped API port 3002.
   if (publicApiBase.includes('://localhost')) {
-    return publicApiBase.replace('://localhost', '://host.docker.internal');
+    return trimTrailingSlash(publicApiBase.replace('://localhost', '://host.docker.internal'));
   }
+
+  if (isAbsoluteHttpUrl(publicApiBase)) {
+    return trimTrailingSlash(publicApiBase);
+  }
+
+  const siteOrigin = deriveSiteOrigin();
+  if (siteOrigin) {
+    const normalizedBase = publicApiBase.startsWith('/') ? publicApiBase : `/${publicApiBase}`;
+    return `${siteOrigin}${trimTrailingSlash(normalizedBase)}`;
+  }
+
   return publicApiBase;
 }
 
@@ -17,17 +46,17 @@ const SERVER_API_BASE = deriveServerApiBase(PUBLIC_API_BASE);
 function resolveApiBase(): string {
   if (typeof window === 'undefined') return SERVER_API_BASE;
 
-  // When frontend is opened via HTTPS tunnel/domain, avoid hardcoded localhost API.
-  // If NEXT_PUBLIC_API_BASE still points to localhost, fallback to same-origin /api.
-  const base = PUBLIC_API_BASE.trim();
+  const base = PUBLIC_API_BASE;
   const isLocalhostBase = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(base);
   const browserHost = window.location.hostname.toLowerCase();
   const isBrowserLocalhost = browserHost === 'localhost' || browserHost === '127.0.0.1';
 
-  if (isLocalhostBase && !isBrowserLocalhost) {
+  if (!isBrowserLocalhost) {
     return '/api';
   }
-  return base;
+  if (isLocalhostBase) return base;
+  if (isAbsoluteHttpUrl(base)) return trimTrailingSlash(base);
+  return base || '/api';
 }
 
 export const API_BASE = resolveApiBase();
@@ -69,4 +98,3 @@ export async function fetchTextOr(path: string, fallback: string, init?: Request
     return fallback;
   }
 }
-
