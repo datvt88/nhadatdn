@@ -103,6 +103,56 @@ function uniqueKeywords(values: string[]): string[] {
   return out;
 }
 
+function resolveKeywordIntent(keyword: string, district: string, districts: DistrictOption[]): {
+  effectiveKeyword: string;
+  effectiveDistrictSlug: string;
+} {
+  const explicitDistrictSlug = resolveDistrictSlug(district, districts);
+  const rawKeyword = keyword.trim();
+  const normalizedKeyword = normalizeVietnameseKeyword(rawKeyword);
+
+  if (!normalizedKeyword) {
+    return {
+      effectiveKeyword: '',
+      effectiveDistrictSlug: explicitDistrictSlug,
+    };
+  }
+
+  if (explicitDistrictSlug) {
+    return {
+      effectiveKeyword: rawKeyword,
+      effectiveDistrictSlug: explicitDistrictSlug,
+    };
+  }
+
+  for (const item of districts) {
+    if (normalizeVietnameseKeyword(item.name) === normalizedKeyword || normalizeVietnameseKeyword(item.slug) === normalizedKeyword) {
+      return {
+        effectiveKeyword: '',
+        effectiveDistrictSlug: item.slug,
+      };
+    }
+
+    const wards = Array.isArray(item.wards) ? item.wards : [];
+    for (const ward of wards) {
+      const wardLabel = ward?.name?.trim();
+      const wardSlug = ward?.slug?.trim();
+      if (!wardLabel && !wardSlug) continue;
+      if ((wardLabel && normalizeVietnameseKeyword(wardLabel) === normalizedKeyword) || (wardSlug && normalizeVietnameseKeyword(wardSlug) === normalizedKeyword)) {
+        return {
+          effectiveKeyword: '',
+          effectiveDistrictSlug: item.slug,
+        };
+      }
+    }
+  }
+
+  return {
+    effectiveKeyword: rawKeyword,
+    effectiveDistrictSlug: explicitDistrictSlug,
+  };
+}
+
 export function HomeRealtime({
   initialSaleListings,
   initialRentListings,
@@ -129,6 +179,10 @@ export function HomeRealtime({
     [areaMax, areaMin, priceMax, priceMin, propertyType],
   );
   const districtSlug = useMemo(() => resolveDistrictSlug(district, districts), [district, districts]);
+  const searchIntent = useMemo(
+    () => resolveKeywordIntent(keyword, district, districts),
+    [district, districts, keyword],
+  );
 
   const keywordSuggestions = useMemo(() => {
     const dictionary = new Map<string, KeywordSuggestion>();
@@ -174,13 +228,14 @@ export function HomeRealtime({
   }, [initialDistricts]);
 
   const fetchListings = useCallback(async () => {
-    const keywordCandidates = uniqueKeywords([keyword, normalizeVietnameseKeyword(keyword)]);
+    const keywordCandidates = uniqueKeywords([searchIntent.effectiveKeyword, normalizeVietnameseKeyword(searchIntent.effectiveKeyword)]);
+    const effectiveDistrictSlug = searchIntent.effectiveDistrictSlug;
 
     setLoading(true);
     try {
       const runSearch = async (kw: string) => {
-        const saleParams = buildSearchParams({ keyword: kw, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
-        const rentParams = buildSearchParams({ keyword: kw, district: districtSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
+        const saleParams = buildSearchParams({ keyword: kw, district: effectiveDistrictSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
+        const rentParams = buildSearchParams({ keyword: kw, district: effectiveDistrictSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
         const [saleRes, rentRes] = await Promise.all([
           fetch(`${API_BASE}/search?${saleParams.toString()}`, { cache: 'no-store' }),
           fetch(`${API_BASE}/search?${rentParams.toString()}`, { cache: 'no-store' }),
@@ -205,7 +260,7 @@ export function HomeRealtime({
     } finally {
       setLoading(false);
     }
-  }, [areaMax, areaMin, districtSlug, keyword, priceMax, priceMin, propertyType]);
+  }, [areaMax, areaMin, priceMax, priceMin, propertyType, searchIntent]);
 
   const onSubmitFilters = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
