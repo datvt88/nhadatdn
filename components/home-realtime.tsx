@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ListingShowcase } from './listing-showcase';
@@ -17,6 +17,8 @@ type KeywordSuggestion = {
   districtSlug: string;
 };
 type PropertyTypeOption = { value: string; label: string };
+
+const PAGE_SIZE = 20;
 
 const PROPERTY_TYPE_OPTIONS: PropertyTypeOption[] = [
   { value: '', label: 'Tất cả loại hình' },
@@ -53,7 +55,7 @@ function buildSearchParams({
   areaMin,
   areaMax,
   propertyType,
-  dealType,
+  page,
 }: {
   keyword: string;
   district: string;
@@ -62,9 +64,9 @@ function buildSearchParams({
   areaMin: string;
   areaMax: string;
   propertyType: string;
-  dealType: 'can-ban' | 'cho-thue';
+  page: number;
 }): URLSearchParams {
-  const query = new URLSearchParams({ pageSize: '20', city: 'da-nang', dealType });
+  const query = new URLSearchParams({ pageSize: String(PAGE_SIZE), page: String(page), city: 'da-nang' });
   if (keyword.trim()) query.set('q', keyword.trim());
   if (district.trim()) query.set('district', district.trim());
   if (priceMin.trim()) query.set('price_min', priceMin.trim());
@@ -154,16 +156,17 @@ function resolveKeywordIntent(keyword: string, district: string, districts: Dist
 }
 
 export function HomeRealtime({
-  initialSaleListings,
-  initialRentListings,
+  initialListings,
+  initialTotal,
   initialDistricts = [],
 }: {
-  initialSaleListings: ListingItem[];
-  initialRentListings: ListingItem[];
+  initialListings: ListingItem[];
+  initialTotal: number;
   initialDistricts?: DistrictOption[];
 }) {
-  const [saleListings, setSaleListings] = useState<ListingItem[]>(initialSaleListings);
-  const [rentListings, setRentListings] = useState<ListingItem[]>(initialRentListings);
+  const [listings, setListings] = useState<ListingItem[]>(initialListings);
+  const [total, setTotal] = useState<number>(initialTotal);
+  const [currentPage, setCurrentPage] = useState(1);
   const [keyword, setKeyword] = useState('');
   const [district, setDistrict] = useState('');
   const [districts, setDistricts] = useState<DistrictOption[]>(initialDistricts);
@@ -227,36 +230,45 @@ export function HomeRealtime({
     };
   }, [initialDistricts]);
 
-  const fetchListings = useCallback(async () => {
+  const fetchListings = useCallback(async (targetPage: number) => {
     const keywordCandidates = uniqueKeywords([searchIntent.effectiveKeyword, normalizeVietnameseKeyword(searchIntent.effectiveKeyword)]);
     const effectiveDistrictSlug = searchIntent.effectiveDistrictSlug;
 
     setLoading(true);
     try {
       const runSearch = async (kw: string) => {
-        const saleParams = buildSearchParams({ keyword: kw, district: effectiveDistrictSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'can-ban' });
-        const rentParams = buildSearchParams({ keyword: kw, district: effectiveDistrictSlug, priceMin, priceMax, areaMin, areaMax, propertyType, dealType: 'cho-thue' });
-        const [saleRes, rentRes] = await Promise.all([
-          fetch(`${API_BASE}/search?${saleParams.toString()}`, { cache: 'no-store' }),
-          fetch(`${API_BASE}/search?${rentParams.toString()}`, { cache: 'no-store' }),
-        ]);
-        const saleItems = saleRes.ok ? (((await saleRes.json()) as SearchResponse).items ?? []) : [];
-        const rentItems = rentRes.ok ? (((await rentRes.json()) as SearchResponse).items ?? []) : [];
+        const params = buildSearchParams({
+          keyword: kw,
+          district: effectiveDistrictSlug,
+          priceMin,
+          priceMax,
+          areaMin,
+          areaMax,
+          propertyType,
+          page: targetPage,
+        });
+        const res = await fetch(`${API_BASE}/search?${params.toString()}`, { cache: 'no-store' });
+        if (!res.ok) {
+          return { items: [] as ListingItem[], total: 0 };
+        }
+        const payload = (await res.json()) as SearchResponse;
         return {
-          saleItems: Array.isArray(saleItems) ? saleItems : [],
-          rentItems: Array.isArray(rentItems) ? rentItems : [],
+          items: Array.isArray(payload.items) ? payload.items : [],
+          total: Number.isFinite(Number(payload.total)) ? Number(payload.total) : 0,
         };
       };
 
       let result = await runSearch(keywordCandidates[0] ?? '');
-      if (result.saleItems.length === 0 && result.rentItems.length === 0 && keywordCandidates.length > 1) {
+      if (result.items.length === 0 && result.total === 0 && keywordCandidates.length > 1) {
         result = await runSearch(keywordCandidates[1] ?? '');
       }
-      setSaleListings(result.saleItems);
-      setRentListings(result.rentItems);
+      setListings(result.items);
+      setTotal(result.total);
+      setCurrentPage(targetPage);
     } catch {
-      setSaleListings([]);
-      setRentListings([]);
+      setListings([]);
+      setTotal(0);
+      setCurrentPage(targetPage);
     } finally {
       setLoading(false);
     }
@@ -264,8 +276,13 @@ export function HomeRealtime({
 
   const onSubmitFilters = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void fetchListings();
+    void fetchListings(1);
   }, [fetchListings]);
+
+  const onPageChange = useCallback((page: number) => {
+    if (page === currentPage || loading) return;
+    void fetchListings(page);
+  }, [currentPage, fetchListings, loading]);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#eef8f8_0%,_#f6fbfb_35%,_#ffffff_100%)] pb-16">
@@ -280,95 +297,95 @@ export function HomeRealtime({
         </header>
 
         <form className="mx-auto mt-6 w-full max-w-6xl" onSubmit={onSubmitFilters}>
-        <div className="grid grid-cols-1 gap-2.5 md:mt-1 md:grid-cols-[1fr_240px_auto] md:gap-3">
-          <label className="group flex h-12 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 shadow-sm transition focus-within:border-[var(--brand-primary)] sm:h-14 sm:px-5">
-            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[var(--brand-primary)]" aria-hidden="true">
-              <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
-            </svg>
-            <input
-              aria-label="Tìm kiếm bất động sản Đà Nẵng"
-              placeholder="Từ khóa"
-              className="h-full w-full bg-transparent text-base text-slate-700 outline-none placeholder:text-slate-400 sm:text-lg"
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-            />
-          </label>
+          <div className="grid grid-cols-1 gap-2.5 md:mt-1 md:grid-cols-[1fr_240px_auto] md:gap-3">
+            <label className="group flex h-12 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 shadow-sm transition focus-within:border-[var(--brand-primary)] sm:h-14 sm:px-5">
+              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[var(--brand-primary)]" aria-hidden="true">
+                <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
+              </svg>
+              <input
+                aria-label="Tìm kiếm bất động sản Đà Nẵng"
+                placeholder="Từ khóa"
+                className="h-full w-full bg-transparent text-base text-slate-700 outline-none placeholder:text-slate-400 sm:text-lg"
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+              />
+            </label>
 
-          <select
-            aria-label="Lọc theo phường/xã"
-            className="h-12 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-14 sm:px-5 sm:text-base"
-            value={district}
-            onChange={(event) => setDistrict(event.target.value)}
-          >
-            <option value="">Toàn bộ phường/xã</option>
-            {districts.map((item) => (
-              <option key={item.slug} value={item.slug}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+            <select
+              aria-label="Lọc theo phường/xã"
+              className="h-12 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-14 sm:px-5 sm:text-base"
+              value={district}
+              onChange={(event) => setDistrict(event.target.value)}
+            >
+              <option value="">Toàn bộ phường/xã</option>
+              {districts.map((item) => (
+                <option key={item.slug} value={item.slug}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
 
-          <button
-            className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--brand-primary)] px-6 text-base font-bold text-white shadow-md transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-70 sm:h-14 sm:px-8 sm:text-lg md:min-w-[96px]"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? 'Đang lọc...' : 'Lọc'}
-          </button>
-        </div>
+            <button
+              className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--brand-primary)] px-6 text-base font-bold text-white shadow-md transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-70 sm:h-14 sm:px-8 sm:text-lg md:min-w-[96px]"
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? 'Đang lọc...' : 'Lọc'}
+            </button>
+          </div>
 
-        <div className="mx-auto mt-2.5 w-full max-w-6xl">
-          <p className="text-xs text-slate-500">Gợi ý nhanh: nhập tên đường, phường/xã mới của Đà Nẵng để lọc chính xác hơn.</p>
-          <div className="mt-1.5 max-h-20 overflow-y-auto pr-1 sm:max-h-24">
-            <div className="flex flex-wrap gap-1.5 sm:gap-2">
-            {keywordSuggestions.map((item) => (
-              <button
-                key={`${item.districtSlug}-${item.label}`}
-                type="button"
-                className="rounded-full border border-[var(--brand-primary)]/20 bg-white px-2.5 py-1 text-[12px] text-slate-600 transition hover:border-[var(--brand-primary)]/40 hover:bg-[rgba(40,189,191,0.08)] sm:px-3 sm:text-xs"
-                onClick={() => {
-                  setKeyword(item.label);
-                  setDistrict(item.districtSlug);
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
+          <div className="mx-auto mt-2.5 w-full max-w-6xl">
+            <p className="text-xs text-slate-500">Gợi ý nhanh: nhập tên đường, phường/xã mới của Đà Nẵng để lọc chính xác hơn.</p>
+            <div className="mt-1.5 max-h-20 overflow-y-auto pr-1 sm:max-h-24">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                {keywordSuggestions.map((item) => (
+                  <button
+                    key={`${item.districtSlug}-${item.label}`}
+                    type="button"
+                    className="rounded-full border border-[var(--brand-primary)]/20 bg-white px-2.5 py-1 text-[12px] text-slate-600 transition hover:border-[var(--brand-primary)]/40 hover:bg-[rgba(40,189,191,0.08)] sm:px-3 sm:text-xs"
+                    onClick={() => {
+                      setKeyword(item.label);
+                      setDistrict(item.districtSlug);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mx-auto mt-3 grid w-full max-w-6xl grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
-          <input aria-label="Giá tối thiểu" placeholder="Giá từ" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} />
-          <input aria-label="Giá tối đa" placeholder="Giá đến" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} />
-          <input aria-label="Diện tích tối thiểu" placeholder="DT từ (m2)" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={areaMin} onChange={(event) => setAreaMin(event.target.value)} />
-          <input aria-label="Diện tích tối đa" placeholder="DT đến (m2)" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={areaMax} onChange={(event) => setAreaMax(event.target.value)} />
-          <select
-            aria-label="Lọc theo loại hình bất động sản"
-            className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]"
-            value={propertyType}
-            onChange={(event) => setPropertyType(event.target.value)}
-          >
-            {PROPERTY_TYPE_OPTIONS.map((item) => (
-              <option key={item.value || 'all'} value={item.value}>{item.label}</option>
-            ))}
-          </select>
-        </div>
+          <div className="mx-auto mt-3 grid w-full max-w-6xl grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
+            <input aria-label="Giá tối thiểu" placeholder="Giá từ" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} />
+            <input aria-label="Giá tối đa" placeholder="Giá đến" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} />
+            <input aria-label="Diện tích tối thiểu" placeholder="DT từ (m2)" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={areaMin} onChange={(event) => setAreaMin(event.target.value)} />
+            <input aria-label="Diện tích tối đa" placeholder="DT đến (m2)" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={areaMax} onChange={(event) => setAreaMax(event.target.value)} />
+            <select
+              aria-label="Lọc theo loại hình bất động sản"
+              className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]"
+              value={propertyType}
+              onChange={(event) => setPropertyType(event.target.value)}
+            >
+              {PROPERTY_TYPE_OPTIONS.map((item) => (
+                <option key={item.value || 'all'} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </div>
         </form>
 
         {hasExtraFilters ? <p className="mt-3 text-center text-sm text-slate-500">Đang áp dụng bộ lọc nâng cao.</p> : null}
-
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        <ListingShowcase saleListings={saleListings} rentListings={rentListings} />
+        <ListingShowcase
+          listings={listings}
+          total={total}
+          currentPage={currentPage}
+          pageSize={PAGE_SIZE}
+          loading={loading}
+          onPageChange={onPageChange}
+        />
       </section>
     </main>
   );
 }
-
-
-
-
-
-

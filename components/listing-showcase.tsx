@@ -1,6 +1,5 @@
-﻿import type { ListingItem } from '../lib/types';
+import type { ListingItem } from '../lib/types';
 import { ListingCard } from './listing-card';
-import { sortVipFirstNewest } from '../lib/listing-sort';
 
 function sectionTitle(id: string, label: string) {
   return (
@@ -11,17 +10,24 @@ function sectionTitle(id: string, label: string) {
   );
 }
 
-export function ListingShowcase({
-  saleListings,
-  rentListings,
-}: {
-  saleListings: ListingItem[];
-  rentListings: ListingItem[];
-}) {
-  const newestSales = sortVipFirstNewest(saleListings).slice(0, 8);
-  const newestRents = sortVipFirstNewest(rentListings).slice(0, 8);
+type ListingShowcaseProps = {
+  listings: ListingItem[];
+  total: number;
+  currentPage: number;
+  pageSize: number;
+  loading?: boolean;
+  onPageChange?: (page: number) => void;
+};
 
-  if (newestSales.length === 0 && newestRents.length === 0) {
+export function ListingShowcase({
+  listings,
+  total,
+  currentPage,
+  pageSize,
+  loading = false,
+  onPageChange,
+}: ListingShowcaseProps) {
+  if (listings.length === 0) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
         Chưa có tin đăng phù hợp bộ lọc. Vui lòng thử điều kiện khác.
@@ -29,35 +35,81 @@ export function ListingShowcase({
     );
   }
 
-  return (
-    <div className="space-y-14">
-      <section>
-        {sectionTitle("sale-latest", 'Bất động sản bán mới nhất')}
-        {newestSales.length > 0 ? (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {newestSales.map((listing) => (
-              <ListingCard key={`sale-${listing.id}`} listing={listing} />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Chưa có tin mua bán nhà đất trong danh sách hiện tại.</div>
-        )}
-      </section>
+  const totalPages = Math.max(1, Math.ceil(Math.max(total, listings.length) / Math.max(pageSize, 1)));
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startItem = total > 0 ? (safeCurrentPage - 1) * pageSize + 1 : 0;
+  const endItem = total > 0 ? Math.min(startItem + listings.length - 1, total) : listings.length;
+  const pages = Array.from({ length: totalPages }, (_, idx) => idx + 1).filter((page) => {
+    if (totalPages <= 7) return true;
+    return page === 1 || page === totalPages || Math.abs(page - safeCurrentPage) <= 1;
+  });
 
+  return (
+    <div className="space-y-6">
       <section>
-        {sectionTitle("rent-latest", 'Bất động sản cho thuê mới nhất')}
-        {newestRents.length > 0 ? (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {newestRents.map((listing) => (
-              <ListingCard key={`rent-${listing.id}`} listing={listing} />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Chưa có tin cho thuê nhà đất trong danh sách hiện tại.</div>
-        )}
+        {sectionTitle('homepage-latest', 'Bất động sản nổi bật mới nhất')}
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Hiển thị <span className="font-semibold text-slate-900">{startItem}</span>
+            {' - '}
+            <span className="font-semibold text-slate-900">{endItem}</span>
+            {' / '}
+            <span className="font-semibold text-slate-900">{total}</span> tin
+          </p>
+          <p className="text-xs text-slate-500 sm:text-sm">
+            {loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {listings.map((listing) => (
+            <ListingCard key={listing.id} listing={listing} />
+          ))}
+        </div>
+
+        {totalPages > 1 ? (
+          <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang trang chủ">
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onPageChange?.(safeCurrentPage - 1)}
+              disabled={safeCurrentPage <= 1 || loading}
+            >
+              Trước
+            </button>
+            {pages.map((page, index) => {
+              const prev = pages[index - 1];
+              const gapBefore = typeof prev === 'number' && page - prev > 1;
+              return (
+                <span key={`page-${page}`} className="contents">
+                  {gapBefore ? <span className="px-1 text-slate-400">…</span> : null}
+                  <button
+                    type="button"
+                    className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                      page === safeCurrentPage
+                        ? 'bg-[var(--brand-primary)] text-white'
+                        : 'border border-slate-200 bg-white text-slate-700 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]'
+                    }`}
+                    onClick={() => onPageChange?.(page)}
+                    disabled={page === safeCurrentPage || loading}
+                    aria-current={page === safeCurrentPage ? 'page' : undefined}
+                  >
+                    {page}
+                  </button>
+                </span>
+              );
+            })}
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onPageChange?.(safeCurrentPage + 1)}
+              disabled={safeCurrentPage >= totalPages || loading}
+            >
+              Sau
+            </button>
+          </nav>
+        ) : null}
       </section>
     </div>
   );
 }
-
-

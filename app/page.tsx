@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { HeaderNav } from '../components/header-nav';
 import { HomeRealtime } from '../components/home-realtime';
 import { fetchJsonOr } from '../lib/api';
+import { buildListingPath } from '../lib/listing-route';
+import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '../lib/seo';
 import type { ListingItem, SearchResponse } from '../lib/types';
 
 type WardOption = { name: string; slug: string };
@@ -13,16 +15,33 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Mua bán nhà đất Đà Nẵng',
-  description: 'Tìm kiếm bất động sản Đà Nẵng nhanh chóng và luôn được cập nhật mới nhất',
-  keywords: ['nhà đất Đà Nẵng', 'mua bán nhà đất Đà Nẵng', 'bất động sản Đà Nẵng'],
+  description:
+    'Mua bán nhà đất Đà Nẵng cập nhật liên tục: lọc theo phường/xã, giá, diện tích, loại hình và xem tin mới nhất theo thời gian thực.',
+  keywords: [
+    'nhà đất Đà Nẵng',
+    'mua bán nhà đất Đà Nẵng',
+    'bất động sản Đà Nẵng',
+    'tin đăng nhà đất Đà Nẵng',
+    'nhà đất Hải Châu',
+    'nhà đất Sơn Trà',
+  ],
   alternates: {
     canonical: '/',
   },
   openGraph: {
     title: 'Mua bán nhà đất Đà Nẵng',
-    description: 'Tìm kiếm bất động sản Đà Nẵng nhanh và cập nhật mới nhất',
-    url: '/',
+    description:
+      'Tìm nhanh nhà đất Đà Nẵng theo phường/xã mới nhất, giá, diện tích và loại hình. Dữ liệu cập nhật realtime.',
+    url: getSiteUrl(),
     type: 'website',
+    images: [{ url: toAbsoluteUrl('/logo-nhadatdn.svg'), width: 512, height: 512, alt: 'Mua bán nhà đất Đà Nẵng' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Mua bán nhà đất Đà Nẵng',
+    description:
+      'Tìm nhanh nhà đất Đà Nẵng theo phường/xã mới nhất, giá, diện tích và loại hình. Dữ liệu cập nhật realtime.',
+    images: [toAbsoluteUrl('/logo-nhadatdn.svg')],
   },
 };
 
@@ -35,40 +54,63 @@ async function getDistrictCatalog(): Promise<DistrictOption[]> {
   return Array.isArray(payload.districts) ? payload.districts : [];
 }
 
-async function getHomepageListingsByDealType(dealType: 'can-ban' | 'cho-thue'): Promise<ListingItem[]> {
-  const payload = await fetchJsonOr<SearchResponse>(
-    `/search?city=da-nang&pageSize=20&dealType=${dealType}`,
+async function getHomepageListings(): Promise<SearchResponse> {
+  return fetchJsonOr<SearchResponse>(
+    '/search?city=da-nang&page=1&pageSize=20',
     { took: 0, total: 0, items: [] },
     { cache: 'no-store' },
   );
-  return payload.items;
 }
 
 export default async function HomePage() {
-  const [saleListings, rentListings, districts] = await Promise.all([
-    getHomepageListingsByDealType('can-ban'),
-    getHomepageListingsByDealType('cho-thue'),
+  const [listingPayload, districts] = await Promise.all([
+    getHomepageListings(),
     getDistrictCatalog(),
   ]);
 
-  const jsonLd = {
+  const listings = Array.isArray(listingPayload.items) ? listingPayload.items : [];
+  const total = Number.isFinite(Number(listingPayload.total)) ? Number(listingPayload.total) : listings.length;
+  const siteUrl = getSiteUrl();
+  const latestForSeo = listings.slice(0, 12);
+
+  const webSiteJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'NhadatDN',
-    url: 'https://nhadatdn.net',
+    url: siteUrl,
     potentialAction: {
       '@type': 'SearchAction',
-      target: 'https://nhadatdn.net/mua-ban-nha-dat?q={search_term_string}',
+      target: `${siteUrl}/mua-ban-nha-dat?q={search_term_string}`,
       'query-input': 'required name=search_term_string',
     },
   };
-  const jsonLdString = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+
+  const itemListJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Tin nhà đất Đà Nẵng mới nhất',
+    itemListElement: latestForSeo.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      url: toAbsoluteUrl(
+        buildListingPath({
+          slug: item.slug,
+          title: item.title,
+          district: item.district || 'Đà Nẵng',
+          categoryHint: (item.dealType ?? item.DealType ?? '').toString(),
+        }),
+      ),
+      name: normalizeSeoText(item.title || 'Tin nhà đất Đà Nẵng'),
+    })),
+  };
+
+  const jsonLdString = JSON.stringify([webSiteJsonLd, itemListJsonLd]).replace(/</g, '\u003c');
 
   return (
     <>
       <HeaderNav />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString }} />
-      <HomeRealtime initialSaleListings={saleListings} initialRentListings={rentListings} initialDistricts={districts} />
+      <HomeRealtime initialListings={listings} initialTotal={total} initialDistricts={districts} />
     </>
   );
 }
