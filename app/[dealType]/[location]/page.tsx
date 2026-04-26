@@ -108,7 +108,7 @@ export default async function DealTypeLocationPage({ params }: { params: { dealT
   }
 
   const payload = await fetchJsonOr<SearchResponse>(
-    `/search?city=da-nang&district=${encodeURIComponent(district.slug)}&pageSize=24&dealType=${dealType}`,
+    `/search?city=da-nang&district=${encodeURIComponent(district.slug)}&pageSize=20&dealType=${dealType}`,
     { took: 0, total: 0, items: [] },
     { next: { revalidate: 30 } },
   );
@@ -140,7 +140,8 @@ export default async function DealTypeLocationPage({ params }: { params: { dealT
         <div className="mt-6">
           <SearchListingFeed
             initial={payload}
-            initialQuery={{ city: 'da-nang', district: district.slug, pageSize: 24, dealType }}
+            initialQuery={{ city: 'da-nang', district: district.slug, pageSize: 20, dealType }}
+            mode="page"
           />
         </div>
       </section>
