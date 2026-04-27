@@ -9,7 +9,6 @@ import { resolveDealType, type DealType } from '../lib/listing-route';
 import { sortVipFirstNewest } from '../lib/listing-sort';
 import type { ListingItem, SearchResponse } from '../lib/types';
 import { ListingGrid } from './listing-grid';
-import { PaginationSeoLinks } from './pagination-seo-links';
 
 function mergeUniqueListings(current: ListingItem[], incoming: ListingItem[]): ListingItem[] {
   const seen = new Set(current.map((item) => item.id));
@@ -95,15 +94,6 @@ export function SearchListingFeed({
 
   return (
     <div className="space-y-5">
-      {mode === 'page' && basePath ? (
-        <PaginationSeoLinks
-          basePath={basePath}
-          currentPage={safeCurrentPage}
-          totalPages={totalPages}
-          query={pageQuery}
-        />
-      ) : null}
-
       <div className="flex items-center justify-between rounded-xl border border-[var(--brand-primary)]/20 bg-[rgba(40,189,191,0.08)] px-3 py-2 text-sm text-slate-600">
         <p>{summary}</p>
         <p>{initial.took} ms</p>

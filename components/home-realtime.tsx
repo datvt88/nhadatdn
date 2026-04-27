@@ -1,8 +1,11 @@
 'use client';
 
+import type { Route } from 'next';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ListingShowcase } from './listing-showcase';
 import { API_BASE } from '../lib/api';
+import { buildPagePath } from '../lib/pagination-seo';
 import type { ListingItem, SearchResponse } from '../lib/types';
 
 type WardOption = { name: string; slug: string };
@@ -159,14 +162,16 @@ export function HomeRealtime({
   initialListings,
   initialTotal,
   initialDistricts = [],
+  initialPage = 1,
 }: {
   initialListings: ListingItem[];
   initialTotal: number;
   initialDistricts?: DistrictOption[];
+  initialPage?: number;
 }) {
   const [listings, setListings] = useState<ListingItem[]>(initialListings);
   const [total, setTotal] = useState<number>(initialTotal);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(initialPage);
   const [keyword, setKeyword] = useState('');
   const [district, setDistrict] = useState('');
   const [districts, setDistricts] = useState<DistrictOption[]>(initialDistricts);
@@ -176,10 +181,16 @@ export function HomeRealtime({
   const [areaMax, setAreaMax] = useState('');
   const [propertyType, setPropertyType] = useState('');
   const [loading, setLoading] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
 
   const hasExtraFilters = useMemo(
     () => Boolean(priceMin || priceMax || areaMin || areaMax || propertyType),
     [areaMax, areaMin, priceMax, priceMin, propertyType],
+  );
+  const hasActiveFilters = useMemo(
+    () => Boolean(keyword.trim() || district.trim() || priceMin || priceMax || areaMin || areaMax || propertyType),
+    [areaMax, areaMin, district, keyword, priceMax, priceMin, propertyType],
   );
   const districtSlug = useMemo(() => resolveDistrictSlug(district, districts), [district, districts]);
   const searchIntent = useMemo(
@@ -216,6 +227,16 @@ export function HomeRealtime({
   }, [districts, keyword]);
 
   useEffect(() => {
+    setListings(initialListings);
+    setTotal(initialTotal);
+    setCurrentPage(initialPage);
+  }, [initialListings, initialPage, initialTotal]);
+
+  useEffect(() => {
+    if (initialDistricts.length > 0) {
+      setDistricts(initialDistricts);
+      return;
+    }
     let active = true;
     const loadCatalog = async () => {
       const res = await fetch(`${API_BASE}/locations/danang`, { cache: 'no-store' });
@@ -276,8 +297,9 @@ export function HomeRealtime({
 
   const onSubmitFilters = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    router.replace((pathname || '/') as Route);
     void fetchListings(1);
-  }, [fetchListings]);
+  }, [fetchListings, pathname, router]);
 
   const onPageChange = useCallback((page: number) => {
     if (page === currentPage || loading) return;
@@ -384,6 +406,8 @@ export function HomeRealtime({
           pageSize={PAGE_SIZE}
           loading={loading}
           onPageChange={onPageChange}
+          useLinkPagination={!hasActiveFilters}
+          buildPageHref={(page) => buildPagePath(pathname || '/', page)}
         />
       </section>
     </main>

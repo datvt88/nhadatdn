@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import type { Route } from 'next';
 import type { ListingItem } from '../lib/types';
 import { ListingCard } from './listing-card';
 
@@ -17,6 +19,8 @@ type ListingShowcaseProps = {
   pageSize: number;
   loading?: boolean;
   onPageChange?: (page: number) => void;
+  useLinkPagination?: boolean;
+  buildPageHref?: (page: number) => string;
 };
 
 export function ListingShowcase({
@@ -26,6 +30,8 @@ export function ListingShowcase({
   pageSize,
   loading = false,
   onPageChange,
+  useLinkPagination = false,
+  buildPageHref,
 }: ListingShowcaseProps) {
   if (listings.length === 0) {
     return (
@@ -69,44 +75,87 @@ export function ListingShowcase({
 
         {totalPages > 1 ? (
           <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang trang chủ">
-            <button
-              type="button"
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => onPageChange?.(safeCurrentPage - 1)}
-              disabled={safeCurrentPage <= 1 || loading}
-            >
-              Trước
-            </button>
+            {useLinkPagination && buildPageHref ? (
+              <Link
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
+                href={buildPageHref(safeCurrentPage - 1) as Route}
+                rel="prev"
+                aria-disabled={safeCurrentPage <= 1}
+                tabIndex={safeCurrentPage <= 1 ? -1 : undefined}
+                style={safeCurrentPage <= 1 ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
+              >
+                Trước
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => onPageChange?.(safeCurrentPage - 1)}
+                disabled={safeCurrentPage <= 1 || loading}
+              >
+                Trước
+              </button>
+            )}
             {pages.map((page, index) => {
               const prev = pages[index - 1];
               const gapBefore = typeof prev === 'number' && page - prev > 1;
               return (
                 <span key={`page-${page}`} className="contents">
                   {gapBefore ? <span className="px-1 text-slate-400">…</span> : null}
-                  <button
-                    type="button"
-                    className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
-                      page === safeCurrentPage
-                        ? 'bg-[var(--brand-primary)] text-white'
-                        : 'border border-slate-200 bg-white text-slate-700 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]'
-                    }`}
-                    onClick={() => onPageChange?.(page)}
-                    disabled={page === safeCurrentPage || loading}
-                    aria-current={page === safeCurrentPage ? 'page' : undefined}
-                  >
-                    {page}
-                  </button>
+                  {useLinkPagination && buildPageHref ? (
+                    <Link
+                      className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                        page === safeCurrentPage
+                          ? 'bg-[var(--brand-primary)] text-white'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]'
+                      }`}
+                      href={buildPageHref(page) as Route}
+                      aria-current={page === safeCurrentPage ? 'page' : undefined}
+                      aria-disabled={page === safeCurrentPage}
+                      tabIndex={page === safeCurrentPage ? -1 : undefined}
+                      style={page === safeCurrentPage ? { pointerEvents: 'none' } : undefined}
+                    >
+                      {page}
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                        page === safeCurrentPage
+                          ? 'bg-[var(--brand-primary)] text-white'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]'
+                      }`}
+                      onClick={() => onPageChange?.(page)}
+                      disabled={page === safeCurrentPage || loading}
+                      aria-current={page === safeCurrentPage ? 'page' : undefined}
+                    >
+                      {page}
+                    </button>
+                  )}
                 </span>
               );
             })}
-            <button
-              type="button"
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => onPageChange?.(safeCurrentPage + 1)}
-              disabled={safeCurrentPage >= totalPages || loading}
-            >
-              Sau
-            </button>
+            {useLinkPagination && buildPageHref ? (
+              <Link
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
+                href={buildPageHref(safeCurrentPage + 1) as Route}
+                rel="next"
+                aria-disabled={safeCurrentPage >= totalPages}
+                tabIndex={safeCurrentPage >= totalPages ? -1 : undefined}
+                style={safeCurrentPage >= totalPages ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
+              >
+                Sau
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => onPageChange?.(safeCurrentPage + 1)}
+                disabled={safeCurrentPage >= totalPages || loading}
+              >
+                Sau
+              </button>
+            )}
           </nav>
         ) : null}
       </section>

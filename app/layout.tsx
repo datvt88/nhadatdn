@@ -19,9 +19,6 @@ export const metadata: Metadata = {
     'Nền tảng tìm kiếm và đăng tin nhà đất Đà Nẵng, chuẩn danh mục mua bán/cho thuê theo phường xã mới và bộ lọc realtime.',
   keywords: ['nhà đất Đà Nẵng', 'mua bán nhà đất Đà Nẵng', 'cho thuê nhà đất Đà Nẵng', 'đăng tin nhà đất Đà Nẵng'],
   category: 'real estate',
-  alternates: {
-    canonical: '/',
-  },
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
