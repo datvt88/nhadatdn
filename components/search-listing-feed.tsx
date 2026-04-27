@@ -1,11 +1,15 @@
-﻿'use client';
+'use client';
 
+import Link from 'next/link';
+import type { Route } from 'next';
 import { useMemo, useState } from 'react';
 import { API_BASE } from '../lib/api';
+import { buildPagePath } from '../lib/pagination-seo';
 import { resolveDealType, type DealType } from '../lib/listing-route';
-import type { ListingItem, SearchResponse } from '../lib/types';
 import { sortVipFirstNewest } from '../lib/listing-sort';
+import type { ListingItem, SearchResponse } from '../lib/types';
 import { ListingGrid } from './listing-grid';
+import { PaginationSeoLinks } from './pagination-seo-links';
 
 function mergeUniqueListings(current: ListingItem[], incoming: ListingItem[]): ListingItem[] {
   const seen = new Set(current.map((item) => item.id));
@@ -25,19 +29,25 @@ export function SearchListingFeed({
   initial,
   initialQuery,
   mode = 'cursor',
+  initialPage = 1,
+  basePath,
+  pageQuery,
 }: {
   initial: SearchResponse;
   initialQuery: { q?: string; city?: string; district?: string; posterId?: string; pageSize?: number; dealType?: DealType };
   mode?: 'cursor' | 'page';
+  initialPage?: number;
+  basePath?: string;
+  pageQuery?: Record<string, string | undefined> | undefined;
 }) {
   const pageSize = Math.max(1, initialQuery.pageSize ?? 20);
   const initialItems = sortVipFirstNewest(filterByDealType(initial.items ?? [], initialQuery.dealType));
   const [items, setItems] = useState<ListingItem[]>(initialItems);
   const [nextCursor, setNextCursor] = useState<string | undefined>(initial.nextCursor);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [total, setTotal] = useState(() => Math.max(Number(initial.total ?? 0), initialItems.length));
   const [loading, setLoading] = useState(false);
 
+  const total = Math.max(Number(initial.total ?? 0), initialItems.length);
+  const currentPage = Math.max(1, initialPage);
   const hasDealTypeFilter = Boolean(initialQuery.dealType);
   const hasMore = Boolean(nextCursor);
   const totalPages = Math.max(1, Math.ceil(Math.max(total, items.length) / pageSize));
@@ -83,35 +93,17 @@ export function SearchListingFeed({
     }
   }
 
-  async function loadPage(targetPage: number) {
-    if (loading || targetPage === safeCurrentPage || targetPage < 1 || targetPage > totalPages) return;
-
-    const params = new URLSearchParams();
-    if (initialQuery.q?.trim()) params.set('q', initialQuery.q.trim());
-    if (initialQuery.city?.trim()) params.set('city', initialQuery.city.trim());
-    if (initialQuery.district?.trim()) params.set('district', initialQuery.district.trim());
-    if (initialQuery.posterId?.trim()) params.set('posterId', initialQuery.posterId.trim());
-    if (initialQuery.dealType) params.set('dealType', initialQuery.dealType);
-    params.set('page', String(targetPage));
-    params.set('pageSize', String(pageSize));
-
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/search?${params.toString()}`, { cache: 'no-store' });
-      if (!res.ok) return;
-
-      const payload = (await res.json()) as SearchResponse;
-      const filteredItems = sortVipFirstNewest(filterByDealType(payload.items ?? [], initialQuery.dealType));
-      setItems(filteredItems);
-      setTotal(Math.max(Number(payload.total ?? 0), filteredItems.length));
-      setCurrentPage(targetPage);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="space-y-5">
+      {mode === 'page' && basePath ? (
+        <PaginationSeoLinks
+          basePath={basePath}
+          currentPage={safeCurrentPage}
+          totalPages={totalPages}
+          query={pageQuery}
+        />
+      ) : null}
+
       <div className="flex items-center justify-between rounded-xl border border-[var(--brand-primary)]/20 bg-[rgba(40,189,191,0.08)] px-3 py-2 text-sm text-slate-600">
         <p>{summary}</p>
         <p>{initial.took} ms</p>
@@ -121,44 +113,49 @@ export function SearchListingFeed({
 
       {mode === 'page' && totalPages > 1 ? (
         <nav className="flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang danh mục">
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => void loadPage(safeCurrentPage - 1)}
-            disabled={safeCurrentPage <= 1 || loading}
+          <Link
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
+            href={buildPagePath(basePath ?? '', safeCurrentPage - 1, pageQuery) as Route}
+            rel="prev"
+            aria-disabled={safeCurrentPage <= 1}
+            tabIndex={safeCurrentPage <= 1 ? -1 : undefined}
+            style={safeCurrentPage <= 1 ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
           >
             Trước
-          </button>
+          </Link>
           {pageWindow.map((page, index) => {
             const previous = pageWindow[index - 1];
             const gapBefore = typeof previous === 'number' && page - previous > 1;
             return (
               <span key={`page-${page}`} className="contents">
                 {gapBefore ? <span className="px-1 text-slate-400">…</span> : null}
-                <button
-                  type="button"
+                <Link
                   className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
                     page === safeCurrentPage
                       ? 'bg-[var(--brand-primary)] text-white'
                       : 'border border-slate-200 bg-white text-slate-700 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]'
                   }`}
-                  onClick={() => void loadPage(page)}
-                  disabled={page === safeCurrentPage || loading}
+                  href={buildPagePath(basePath ?? '', page, pageQuery) as Route}
                   aria-current={page === safeCurrentPage ? 'page' : undefined}
+                  aria-disabled={page === safeCurrentPage}
+                  tabIndex={page === safeCurrentPage ? -1 : undefined}
+                  style={page === safeCurrentPage ? { pointerEvents: 'none' } : undefined}
                 >
                   {page}
-                </button>
+                </Link>
               </span>
             );
           })}
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => void loadPage(safeCurrentPage + 1)}
-            disabled={safeCurrentPage >= totalPages || loading}
+          <Link
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
+            href={buildPagePath(basePath ?? '', safeCurrentPage + 1, pageQuery) as Route}
+            rel="next"
+            aria-disabled={safeCurrentPage >= totalPages}
+            tabIndex={safeCurrentPage >= totalPages ? -1 : undefined}
+            style={safeCurrentPage >= totalPages ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
           >
             Sau
-          </button>
+          </Link>
         </nav>
       ) : null}
 
