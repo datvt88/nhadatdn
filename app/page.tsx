@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Head from 'next/head';
 import { HeaderNav } from '../components/header-nav';
 import { HomeRealtime } from '../components/home-realtime';
 import { fetchJsonOr } from '../lib/api';
@@ -122,11 +123,11 @@ export default async function HomePage({
 
   return (
     <>
-      <head>
+      <Head>
         <link rel="canonical" href={canonicalUrl} />
         {prevHref ? <link rel="prev" href={prevHref} /> : null}
         {nextHref ? <link rel="next" href={nextHref} /> : null}
-      </head>
+      </Head>
       <HeaderNav />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString }} />
       <HomeRealtime
