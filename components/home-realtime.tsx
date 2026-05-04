@@ -16,12 +16,31 @@ type DanangCatalog = {
   districts: DistrictOption[];
 };
 type KeywordSuggestion = {
+  id: string;
   label: string;
+  queryText: string;
   districtSlug: string;
+  districtName?: string;
+  wardName?: string;
+  kind: 'district' | 'ward' | 'street';
+  source: 'catalog' | 'map';
+};
+type AddressSuggestResponse = {
+  items?: Array<{
+    label?: string;
+    lat?: string;
+    lng?: string;
+    districtSlug?: string;
+    districtName?: string;
+    wardName?: string;
+    keyword?: string;
+  }>;
 };
 type PropertyTypeOption = { value: string; label: string };
 
 const PAGE_SIZE = 20;
+const REMOTE_SUGGESTION_MIN_CHARS = 2;
+const SUGGESTION_LIMIT = 8;
 
 const PROPERTY_TYPE_OPTIONS: PropertyTypeOption[] = [
   { value: '', label: 'Tất cả loại hình' },
@@ -108,6 +127,117 @@ function uniqueKeywords(values: string[]): string[] {
   return out;
 }
 
+function dedupeSuggestions(items: KeywordSuggestion[]): KeywordSuggestion[] {
+  const out: KeywordSuggestion[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const dedupeKey = `${normalizeVietnameseKeyword(item.label)}|${item.districtSlug}|${item.kind}`;
+    if (!dedupeKey || seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push(item);
+  }
+  return out;
+}
+
+function formatLocalSuggestionLabel(name: string): string {
+  return `Phường ${name}, TP Đà Nẵng`;
+}
+
+function extractSuggestionQueryText(label: string): string {
+  const firstSegment = label.split(',')[0]?.trim() ?? '';
+  return firstSegment
+    .replace(/^(đường|street)\s+/i, '')
+    .replace(/^(phường|xã|quận|huyện|thành phố|tp)\s+/i, '')
+    .trim();
+}
+
+function compactSuggestionLabel(label: string): string {
+  return label
+    .replace(/\bThành phố Đà Nẵng\b/gi, 'TP Đà Nẵng')
+    .replace(/\bDa Nang City\b/gi, 'TP Đà Nẵng')
+    .replace(/\bĐà Nẵng Municipality\b/gi, 'TP Đà Nẵng')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function inferDistrictFromSuggestionLabel(
+  label: string,
+  districts: DistrictOption[],
+): { districtSlug: string; districtName: string; wardName?: string } | null {
+  const normalizedLabel = normalizeVietnameseKeyword(label);
+  if (!normalizedLabel) return null;
+
+  for (const item of districts) {
+    const districtName = item.name.trim();
+    if (!districtName) continue;
+
+    if (normalizedLabel.includes(normalizeVietnameseKeyword(districtName))) {
+      return { districtSlug: item.slug, districtName };
+    }
+
+    const wards = Array.isArray(item.wards) ? item.wards : [];
+    for (const ward of wards) {
+      const wardName = ward?.name?.trim();
+      if (!wardName) continue;
+      if (normalizedLabel.includes(normalizeVietnameseKeyword(wardName))) {
+        return { districtSlug: item.slug, districtName, wardName };
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildCatalogSuggestions(keyword: string, districts: DistrictOption[]): KeywordSuggestion[] {
+  const normalizedKeyword = normalizeVietnameseKeyword(keyword);
+  if (!normalizedKeyword) return [];
+
+  const suggestions: KeywordSuggestion[] = [];
+  for (const item of districts) {
+    const districtName = item.name.trim();
+    if (!districtName) continue;
+    const normalizedDistrictName = normalizeVietnameseKeyword(districtName);
+    if (normalizedDistrictName.includes(normalizedKeyword)) {
+      suggestions.push({
+        id: `catalog-${item.slug}`,
+        label: formatLocalSuggestionLabel(districtName),
+        queryText: '',
+        districtSlug: item.slug,
+        districtName,
+        kind: 'ward',
+        source: 'catalog',
+      });
+    }
+
+    const wards = Array.isArray(item.wards) ? item.wards : [];
+    for (const ward of wards) {
+      const wardName = ward?.name?.trim();
+      if (!wardName) continue;
+      const normalizedWardName = normalizeVietnameseKeyword(wardName);
+      if (!normalizedWardName.includes(normalizedKeyword)) continue;
+      suggestions.push({
+        id: `catalog-${item.slug}-${ward.slug || wardName}`,
+        label: formatLocalSuggestionLabel(wardName),
+        queryText: '',
+        districtSlug: item.slug,
+        districtName,
+        wardName,
+        kind: 'ward',
+        source: 'catalog',
+      });
+    }
+  }
+
+  suggestions.sort((left, right) => {
+    const leftStarts = normalizeVietnameseKeyword(left.label).startsWith(normalizedKeyword);
+    const rightStarts = normalizeVietnameseKeyword(right.label).startsWith(normalizedKeyword);
+    if (leftStarts !== rightStarts) return leftStarts ? -1 : 1;
+    return left.label.localeCompare(right.label, 'vi');
+  });
+
+  return dedupeSuggestions(suggestions).slice(0, SUGGESTION_LIMIT);
+}
+
 function resolveKeywordIntent(keyword: string, district: string, districts: DistrictOption[]): {
   effectiveKeyword: string;
   effectiveDistrictSlug: string;
@@ -181,6 +311,11 @@ export function HomeRealtime({
   const [areaMax, setAreaMax] = useState('');
   const [propertyType, setPropertyType] = useState('');
   const [loading, setLoading] = useState(false);
+  const [remoteSuggestions, setRemoteSuggestions] = useState<KeywordSuggestion[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<KeywordSuggestion | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -199,32 +334,11 @@ export function HomeRealtime({
   );
 
   const keywordSuggestions = useMemo(() => {
-    const dictionary = new Map<string, KeywordSuggestion>();
-    for (const item of districts) {
-      const districtLabel = item.name.trim();
-      if (districtLabel) {
-        const dedupeKey = normalizeVietnameseKeyword(districtLabel);
-        if (dedupeKey && !dictionary.has(dedupeKey)) {
-          dictionary.set(dedupeKey, { label: districtLabel, districtSlug: item.slug });
-        }
-      }
-      const wards = Array.isArray(item.wards) ? item.wards : [];
-      for (const ward of wards) {
-        const wardLabel = ward?.name?.trim();
-        if (!wardLabel) continue;
-        const dedupeKey = normalizeVietnameseKeyword(wardLabel);
-        if (dedupeKey && !dictionary.has(dedupeKey)) {
-          dictionary.set(dedupeKey, { label: wardLabel, districtSlug: item.slug });
-        }
-      }
-    }
-    const all = Array.from(dictionary.values());
-    const q = normalizeVietnameseKeyword(keyword);
-    if (!q) return [];
-    return all
-      .filter((row) => normalizeVietnameseKeyword(row.label).includes(q))
-      .slice(0, 12);
-  }, [districts, keyword]);
+    return dedupeSuggestions([
+      ...buildCatalogSuggestions(keyword, districts),
+      ...remoteSuggestions,
+    ]).slice(0, SUGGESTION_LIMIT);
+  }, [districts, keyword, remoteSuggestions]);
 
   useEffect(() => {
     setListings(initialListings);
@@ -251,9 +365,96 @@ export function HomeRealtime({
     };
   }, [initialDistricts]);
 
-  const fetchListings = useCallback(async (targetPage: number) => {
-    const keywordCandidates = uniqueKeywords([searchIntent.effectiveKeyword, normalizeVietnameseKeyword(searchIntent.effectiveKeyword)]);
-    const effectiveDistrictSlug = searchIntent.effectiveDistrictSlug;
+  useEffect(() => {
+    const normalizedKeyword = normalizeVietnameseKeyword(keyword);
+    if (!normalizedKeyword) {
+      setRemoteSuggestions([]);
+      setSuggestionsLoading(false);
+      setSuggestionsOpen(false);
+      setActiveSuggestionIndex(-1);
+      return;
+    }
+
+    setSuggestionsOpen(true);
+    if (normalizedKeyword.length < REMOTE_SUGGESTION_MIN_CHARS) {
+      setRemoteSuggestions([]);
+      setSuggestionsLoading(false);
+      setActiveSuggestionIndex(0);
+      return;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setSuggestionsLoading(true);
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q: keyword.trim(), limit: String(SUGGESTION_LIMIT) });
+        const res = await fetch(`${API_BASE}/locations/address-suggest?${params.toString()}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          if (active) setRemoteSuggestions([]);
+          return;
+        }
+        const payload = (await res.json()) as AddressSuggestResponse;
+        if (!active) return;
+        const nextSuggestions = Array.isArray(payload.items)
+          ? payload.items
+              .map((item, index) => {
+                const label = compactSuggestionLabel(String(item.label ?? '').trim());
+                if (!label) return null;
+                const inferred = inferDistrictFromSuggestionLabel(label, districts);
+                return {
+                  id: `map-${index}-${normalizeVietnameseKeyword(label)}`,
+                  label,
+                  queryText: String(item.keyword ?? '').trim() || extractSuggestionQueryText(label),
+                  districtSlug: String(item.districtSlug ?? '').trim() || inferred?.districtSlug || '',
+                  districtName: String(item.districtName ?? '').trim() || inferred?.districtName || '',
+                  wardName: String(item.wardName ?? '').trim() || inferred?.wardName || '',
+                  kind: 'street' as const,
+                  source: 'map' as const,
+                };
+              })
+              .filter(Boolean) as KeywordSuggestion[]
+          : [];
+        setRemoteSuggestions(dedupeSuggestions(nextSuggestions));
+      } catch {
+        if (active) {
+          setRemoteSuggestions([]);
+        }
+      } finally {
+        if (active) {
+          setSuggestionsLoading(false);
+          setActiveSuggestionIndex(0);
+        }
+      }
+    }, 220);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [districts, keyword]);
+
+  const applySuggestion = useCallback((item: KeywordSuggestion) => {
+    setSelectedSuggestion(item);
+    setKeyword(item.label);
+    if (item.districtSlug) {
+      setDistrict(item.districtSlug);
+    }
+    setSuggestionsOpen(false);
+    setActiveSuggestionIndex(-1);
+  }, []);
+
+  const fetchListings = useCallback(async (targetPage: number, suggestion?: KeywordSuggestion | null) => {
+    const chosenSuggestion = suggestion ?? selectedSuggestion;
+    const keywordCandidates = chosenSuggestion
+      ? uniqueKeywords(chosenSuggestion.queryText ? [chosenSuggestion.queryText] : [''])
+      : uniqueKeywords([searchIntent.effectiveKeyword, normalizeVietnameseKeyword(searchIntent.effectiveKeyword)]);
+    const effectiveDistrictSlug = chosenSuggestion?.districtSlug || searchIntent.effectiveDistrictSlug;
 
     setLoading(true);
     try {
@@ -293,10 +494,11 @@ export function HomeRealtime({
     } finally {
       setLoading(false);
     }
-  }, [areaMax, areaMin, priceMax, priceMin, propertyType, searchIntent]);
+  }, [areaMax, areaMin, priceMax, priceMin, propertyType, searchIntent, selectedSuggestion]);
 
   const onSubmitFilters = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSuggestionsOpen(false);
     router.replace((pathname || '/') as Route);
     void fetchListings(1);
   }, [fetchListings, pathname, router]);
@@ -320,24 +522,104 @@ export function HomeRealtime({
 
         <form className="mx-auto mt-6 w-full max-w-6xl" onSubmit={onSubmitFilters}>
           <div className="grid grid-cols-1 gap-2.5 md:mt-1 md:grid-cols-[1fr_240px_auto] md:gap-3">
-            <label className="group flex h-12 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 shadow-sm transition focus-within:border-[var(--brand-primary)] sm:h-14 sm:px-5">
-              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[var(--brand-primary)]" aria-hidden="true">
-                <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
-              </svg>
-              <input
-                aria-label="Tìm kiếm bất động sản Đà Nẵng"
-                placeholder="Từ khóa"
-                className="h-full w-full bg-transparent text-base text-slate-700 outline-none placeholder:text-slate-400 sm:text-lg"
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-              />
-            </label>
+            <div className="relative">
+              <label className="group flex h-12 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 shadow-sm transition focus-within:border-[var(--brand-primary)] sm:h-14 sm:px-5">
+                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[var(--brand-primary)]" aria-hidden="true">
+                  <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
+                </svg>
+                <input
+                  aria-label="Tìm kiếm bất động sản Đà Nẵng"
+                  aria-autocomplete="list"
+                  aria-expanded={suggestionsOpen && keywordSuggestions.length > 0}
+                  aria-controls="home-keyword-suggestions"
+                  placeholder="Từ khóa"
+                  className="h-full w-full bg-transparent text-base text-slate-700 outline-none placeholder:text-slate-400 sm:text-lg"
+                  value={keyword}
+                  onFocus={() => {
+                    if (keyword.trim()) setSuggestionsOpen(true);
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => setSuggestionsOpen(false), 120);
+                  }}
+                  onChange={(event) => {
+                    setKeyword(event.target.value);
+                    setSelectedSuggestion(null);
+                    setSuggestionsOpen(true);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!suggestionsOpen || keywordSuggestions.length === 0) return;
+                    if (event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      setActiveSuggestionIndex((prev) => (prev + 1) % keywordSuggestions.length);
+                      return;
+                    }
+                    if (event.key === 'ArrowUp') {
+                      event.preventDefault();
+                      setActiveSuggestionIndex((prev) => (prev <= 0 ? keywordSuggestions.length - 1 : prev - 1));
+                      return;
+                    }
+                    if (event.key === 'Escape') {
+                      setSuggestionsOpen(false);
+                      setActiveSuggestionIndex(-1);
+                      return;
+                    }
+                    if (event.key === 'Enter' && activeSuggestionIndex >= 0 && keywordSuggestions[activeSuggestionIndex]) {
+                      event.preventDefault();
+                      const suggestion = keywordSuggestions[activeSuggestionIndex];
+                      applySuggestion(suggestion);
+                      router.replace((pathname || '/') as Route);
+                      void fetchListings(1, suggestion);
+                    }
+                  }}
+                />
+              </label>
+
+              {suggestionsOpen && (keywordSuggestions.length > 0 || suggestionsLoading) ? (
+                <div
+                  id="home-keyword-suggestions"
+                  className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl"
+                >
+                  <div className="max-h-80 overflow-y-auto py-2">
+                    {keywordSuggestions.map((item, index) => {
+                      const isActive = index === activeSuggestionIndex;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${isActive ? 'bg-[rgba(40,189,191,0.10)]' : 'bg-white hover:bg-slate-50'}`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applySuggestion(item)}
+                        >
+                          <span className="mt-1 inline-flex h-7 w-7 flex-none items-center justify-center rounded-full bg-[rgba(40,189,191,0.12)] text-[11px] font-bold uppercase tracking-wide text-[var(--brand-primary)]">
+                            {item.kind === 'street' ? 'Đg' : 'Px'}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-slate-800 sm:text-[15px]">{item.label}</span>
+                            <span className="block text-xs text-slate-500">
+                              {item.kind === 'street'
+                                ? 'Gợi ý địa chỉ Đà Nẵng theo dữ liệu bản đồ'
+                                : 'Gợi ý phường/xã Đà Nẵng'}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {suggestionsLoading ? (
+                      <div className="px-4 py-3 text-sm text-slate-500">Đang tải gợi ý địa chỉ Đà Nẵng...</div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
             <select
               aria-label="Lọc theo phường/xã"
               className="h-12 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-14 sm:px-5 sm:text-base"
               value={district}
-              onChange={(event) => setDistrict(event.target.value)}
+              onChange={(event) => {
+                setDistrict(event.target.value);
+                setSelectedSuggestion(null);
+              }}
             >
               <option value="">Toàn bộ phường/xã</option>
               {districts.map((item) => (
@@ -357,24 +639,9 @@ export function HomeRealtime({
           </div>
 
           <div className="mx-auto mt-2.5 w-full max-w-6xl">
-            <p className="text-xs text-slate-500">Gợi ý nhanh: nhập tên đường, phường/xã mới của Đà Nẵng để lọc chính xác hơn.</p>
-            <div className="mt-1.5 max-h-20 overflow-y-auto pr-1 sm:max-h-24">
-              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                {keywordSuggestions.map((item) => (
-                  <button
-                    key={`${item.districtSlug}-${item.label}`}
-                    type="button"
-                    className="rounded-full border border-[var(--brand-primary)]/20 bg-white px-2.5 py-1 text-[12px] text-slate-600 transition hover:border-[var(--brand-primary)]/40 hover:bg-[rgba(40,189,191,0.08)] sm:px-3 sm:text-xs"
-                    onClick={() => {
-                      setKeyword(item.label);
-                      setDistrict(item.districtSlug);
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <p className="text-xs text-slate-500">
+              Gợi ý nhanh: nhập tên đường, phường/xã trong Đà Nẵng. Ví dụ: “Hải Châu”, “Phan Đăng Lưu”, “2 Tháng 9”.
+            </p>
           </div>
 
           <div className="mx-auto mt-3 grid w-full max-w-6xl grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
