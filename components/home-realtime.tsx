@@ -260,8 +260,20 @@ function resolveKeywordIntent(keyword: string, district: string, districts: Dist
     };
   }
 
+  const containsNormalizedPhrase = (haystack: string, needle: string): boolean => {
+    const normalizedHaystack = ` ${normalizeVietnameseKeyword(haystack)} `;
+    const normalizedNeedle = normalizeVietnameseKeyword(needle);
+    if (!normalizedNeedle) return false;
+    return normalizedHaystack.includes(` ${normalizedNeedle} `);
+  };
+
   for (const item of districts) {
-    if (normalizeVietnameseKeyword(item.name) === normalizedKeyword || normalizeVietnameseKeyword(item.slug) === normalizedKeyword) {
+    if (
+      normalizeVietnameseKeyword(item.name) === normalizedKeyword ||
+      normalizeVietnameseKeyword(item.slug) === normalizedKeyword ||
+      containsNormalizedPhrase(rawKeyword, item.name) ||
+      containsNormalizedPhrase(rawKeyword, item.slug)
+    ) {
       return {
         effectiveKeyword: '',
         effectiveDistrictSlug: item.slug,
@@ -273,9 +285,14 @@ function resolveKeywordIntent(keyword: string, district: string, districts: Dist
       const wardLabel = ward?.name?.trim();
       const wardSlug = ward?.slug?.trim();
       if (!wardLabel && !wardSlug) continue;
-      if ((wardLabel && normalizeVietnameseKeyword(wardLabel) === normalizedKeyword) || (wardSlug && normalizeVietnameseKeyword(wardSlug) === normalizedKeyword)) {
+      if (
+        (wardLabel && normalizeVietnameseKeyword(wardLabel) === normalizedKeyword) ||
+        (wardSlug && normalizeVietnameseKeyword(wardSlug) === normalizedKeyword) ||
+        (wardLabel && containsNormalizedPhrase(rawKeyword, wardLabel)) ||
+        (wardSlug && containsNormalizedPhrase(rawKeyword, wardSlug))
+      ) {
         return {
-          effectiveKeyword: '',
+          effectiveKeyword: rawKeyword,
           effectiveDistrictSlug: item.slug,
         };
       }
