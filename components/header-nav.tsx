@@ -85,22 +85,13 @@ export function HeaderNav() {
                 Đăng xuất
               </button>
             </>
-          ) : (
-            <>
-              <Link href="/dang-nhap" className="hidden text-base font-medium text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline sm:inline-flex">
-                Đăng nhập
-              </Link>
-              <Link href="/dang-ky" className="hidden rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:inline-flex">
-                Đăng ký
-              </Link>
-            </>
-          )}
+          ) : null}
 
           <Link
-            href="/dang-tin-nha-dat"
+            href={user ? '/dang-tin-nha-dat' : '/dang-nhap'}
             className="inline-flex items-center rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-primary-hover)] sm:px-5 sm:text-base"
           >
-            + Đăng tin
+            {user ? '+ Đăng tin' : 'Đăng nhập'}
           </Link>
         </div>
       </div>
