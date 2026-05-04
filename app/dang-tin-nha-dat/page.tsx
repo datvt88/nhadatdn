@@ -146,6 +146,58 @@ async function fetchApiWithFallback(path: string, init?: RequestInit): Promise<R
   return fetch(`/api${path}`, init);
 }
 
+function buildUploadApiCandidates(path: string): string[] {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const addCandidate = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  const publicBase = (process.env.NEXT_PUBLIC_API_BASE ?? '').trim().replace(/\/+$/, '');
+  if (typeof window !== 'undefined' && /^https?:\/\//i.test(publicBase)) {
+    addCandidate(`${publicBase}${normalizedPath}`);
+  }
+
+  addCandidate(`${API_BASE}${normalizedPath}`);
+  addCandidate(`/api${normalizedPath}`);
+  return candidates;
+}
+
+async function uploadImagesWithFallback(
+  path: string,
+  form: FormData,
+  headers: Record<string, string>,
+): Promise<Response> {
+  const candidates = buildUploadApiCandidates(path);
+  let lastError: unknown = null;
+
+  for (const target of candidates) {
+    try {
+      const res = await fetch(target, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: form,
+      });
+
+      if (res.ok) return res;
+      if (res.status < 500 && res.status !== 404 && res.status !== 413) {
+        return res;
+      }
+      lastError = new Error(`upload failed with status ${res.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError;
+  throw new Error('upload request failed');
+}
+
 function formatTyValue(value: number): string {
   return `${value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d*[1-9])0$/, '$1')} Tỷ`;
 }
@@ -342,12 +394,7 @@ export default function PostListingDanangPage() {
     setUploading(true);
     let res: Response;
     try {
-      res = await fetchApiWithFallback('/uploads/images', {
-        method: 'POST',
-        headers: authHeaders(user),
-        credentials: 'include',
-        body: form,
-      });
+      res = await uploadImagesWithFallback('/uploads/images', form, authHeaders(user));
     } catch {
       setUploading(false);
       setFieldErrors((prev) => ({ ...prev, images: 'Không kết nối được dịch vụ upload ảnh.' }));
