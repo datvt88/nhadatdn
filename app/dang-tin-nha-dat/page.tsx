@@ -317,6 +317,10 @@ export default function PostListingDanangPage() {
 
   async function uploadFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+    if (uploading) {
+      setStatus({ tone: 'info', message: 'Hệ thống đang tải ảnh trước đó. Vui lòng chờ hoàn tất rồi thử lại.' });
+      return;
+    }
     const incoming = Array.from(files);
     if (uploadedImages.length + incoming.length > 10) {
       setFieldErrors((prev) => ({ ...prev, images: 'Tối đa 10 ảnh cho mỗi tin đăng.' }));
@@ -375,6 +379,7 @@ export default function PostListingDanangPage() {
   function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
+    if (uploading) return;
     setDragActive(true);
   }
 
@@ -388,6 +393,7 @@ export default function PostListingDanangPage() {
     event.preventDefault();
     event.stopPropagation();
     setDragActive(false);
+    if (uploading) return;
     void uploadFiles(event.dataTransfer.files);
   }
 
@@ -739,7 +745,7 @@ export default function PostListingDanangPage() {
                   <div
                     className={`rounded-lg border-2 border-dashed p-4 text-center transition ${
                       dragActive ? 'border-brand-500 bg-sky-50' : 'border-slate-300 bg-slate-50'
-                    }`}
+                    } ${uploading ? 'cursor-not-allowed opacity-70' : ''}`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
@@ -750,13 +756,15 @@ export default function PostListingDanangPage() {
                       accept="image/*"
                       multiple
                       onChange={(event) => void uploadFiles(event.target.files)}
+                      disabled={uploading}
                       className="hidden"
                     />
                     <p className="text-sm text-slate-700">Kéo thả ảnh vào đây hoặc</p>
                     <button
                       type="button"
-                      className="mt-2 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                      className="mt-2 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
                     >
                       Chọn ảnh từ máy
                     </button>
