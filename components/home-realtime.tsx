@@ -333,6 +333,7 @@ export function HomeRealtime({
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [selectedSuggestion, setSelectedSuggestion] = useState<KeywordSuggestion | null>(null);
+  const [suggestionNavigationActive, setSuggestionNavigationActive] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -389,6 +390,7 @@ export function HomeRealtime({
       setSuggestionsLoading(false);
       setSuggestionsOpen(false);
       setActiveSuggestionIndex(-1);
+      setSuggestionNavigationActive(false);
       return;
     }
 
@@ -396,7 +398,8 @@ export function HomeRealtime({
     if (normalizedKeyword.length < REMOTE_SUGGESTION_MIN_CHARS) {
       setRemoteSuggestions([]);
       setSuggestionsLoading(false);
-      setActiveSuggestionIndex(0);
+      setActiveSuggestionIndex(-1);
+      setSuggestionNavigationActive(false);
       return;
     }
 
@@ -441,10 +444,11 @@ export function HomeRealtime({
         if (active) {
           setRemoteSuggestions([]);
         }
-      } finally {
+        } finally {
         if (active) {
           setSuggestionsLoading(false);
-          setActiveSuggestionIndex(0);
+          setActiveSuggestionIndex(-1);
+          setSuggestionNavigationActive(false);
         }
       }
     }, 220);
@@ -464,6 +468,7 @@ export function HomeRealtime({
     }
     setSuggestionsOpen(false);
     setActiveSuggestionIndex(-1);
+    setSuggestionNavigationActive(false);
   }, []);
 
   const fetchListings = useCallback(async (targetPage: number, suggestion?: KeywordSuggestion | null) => {
@@ -516,6 +521,7 @@ export function HomeRealtime({
   const onSubmitFilters = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSuggestionsOpen(false);
+    setSuggestionNavigationActive(false);
     router.replace((pathname || '/') as Route);
     void fetchListings(1);
   }, [fetchListings, pathname, router]);
@@ -562,25 +568,30 @@ export function HomeRealtime({
                     setKeyword(event.target.value);
                     setSelectedSuggestion(null);
                     setSuggestionsOpen(true);
+                    setActiveSuggestionIndex(-1);
+                    setSuggestionNavigationActive(false);
                   }}
                   onKeyDown={(event) => {
                     if (!suggestionsOpen || keywordSuggestions.length === 0) return;
                     if (event.key === 'ArrowDown') {
                       event.preventDefault();
+                      setSuggestionNavigationActive(true);
                       setActiveSuggestionIndex((prev) => (prev + 1) % keywordSuggestions.length);
                       return;
                     }
                     if (event.key === 'ArrowUp') {
                       event.preventDefault();
+                      setSuggestionNavigationActive(true);
                       setActiveSuggestionIndex((prev) => (prev <= 0 ? keywordSuggestions.length - 1 : prev - 1));
                       return;
                     }
                     if (event.key === 'Escape') {
                       setSuggestionsOpen(false);
                       setActiveSuggestionIndex(-1);
+                      setSuggestionNavigationActive(false);
                       return;
                     }
-                    if (event.key === 'Enter' && activeSuggestionIndex >= 0 && keywordSuggestions[activeSuggestionIndex]) {
+                    if (event.key === 'Enter' && suggestionNavigationActive && activeSuggestionIndex >= 0 && keywordSuggestions[activeSuggestionIndex]) {
                       event.preventDefault();
                       const suggestion = keywordSuggestions[activeSuggestionIndex];
                       applySuggestion(suggestion);
