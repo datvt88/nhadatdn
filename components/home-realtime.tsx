@@ -238,73 +238,6 @@ function buildCatalogSuggestions(keyword: string, districts: DistrictOption[]): 
   return dedupeSuggestions(suggestions).slice(0, SUGGESTION_LIMIT);
 }
 
-function resolveKeywordIntent(keyword: string, district: string, districts: DistrictOption[]): {
-  effectiveKeyword: string;
-  effectiveDistrictSlug: string;
-} {
-  const explicitDistrictSlug = resolveDistrictSlug(district, districts);
-  const rawKeyword = keyword.trim();
-  const normalizedKeyword = normalizeVietnameseKeyword(rawKeyword);
-
-  if (!normalizedKeyword) {
-    return {
-      effectiveKeyword: '',
-      effectiveDistrictSlug: explicitDistrictSlug,
-    };
-  }
-
-  if (explicitDistrictSlug) {
-    return {
-      effectiveKeyword: rawKeyword,
-      effectiveDistrictSlug: explicitDistrictSlug,
-    };
-  }
-
-  const containsNormalizedPhrase = (haystack: string, needle: string): boolean => {
-    const normalizedHaystack = ` ${normalizeVietnameseKeyword(haystack)} `;
-    const normalizedNeedle = normalizeVietnameseKeyword(needle);
-    if (!normalizedNeedle) return false;
-    return normalizedHaystack.includes(` ${normalizedNeedle} `);
-  };
-
-  for (const item of districts) {
-    if (
-      normalizeVietnameseKeyword(item.name) === normalizedKeyword ||
-      normalizeVietnameseKeyword(item.slug) === normalizedKeyword ||
-      containsNormalizedPhrase(rawKeyword, item.name) ||
-      containsNormalizedPhrase(rawKeyword, item.slug)
-    ) {
-      return {
-        effectiveKeyword: '',
-        effectiveDistrictSlug: item.slug,
-      };
-    }
-
-    const wards = Array.isArray(item.wards) ? item.wards : [];
-    for (const ward of wards) {
-      const wardLabel = ward?.name?.trim();
-      const wardSlug = ward?.slug?.trim();
-      if (!wardLabel && !wardSlug) continue;
-      if (
-        (wardLabel && normalizeVietnameseKeyword(wardLabel) === normalizedKeyword) ||
-        (wardSlug && normalizeVietnameseKeyword(wardSlug) === normalizedKeyword) ||
-        (wardLabel && containsNormalizedPhrase(rawKeyword, wardLabel)) ||
-        (wardSlug && containsNormalizedPhrase(rawKeyword, wardSlug))
-      ) {
-        return {
-          effectiveKeyword: rawKeyword,
-          effectiveDistrictSlug: item.slug,
-        };
-      }
-    }
-  }
-
-  return {
-    effectiveKeyword: rawKeyword,
-    effectiveDistrictSlug: explicitDistrictSlug,
-  };
-}
-
 export function HomeRealtime({
   initialListings,
   initialTotal,
@@ -346,10 +279,6 @@ export function HomeRealtime({
     [areaMax, areaMin, district, keyword, priceMax, priceMin, propertyType],
   );
   const districtSlug = useMemo(() => resolveDistrictSlug(district, districts), [district, districts]);
-  const searchIntent = useMemo(
-    () => resolveKeywordIntent(keyword, district, districts),
-    [district, districts, keyword],
-  );
 
   const keywordSuggestions = useMemo(() => {
     return dedupeSuggestions([
@@ -475,8 +404,8 @@ export function HomeRealtime({
     const chosenSuggestion = suggestion ?? selectedSuggestion;
     const keywordCandidates = chosenSuggestion
       ? uniqueKeywords(chosenSuggestion.queryText ? [chosenSuggestion.queryText] : [''])
-      : uniqueKeywords([searchIntent.effectiveKeyword, normalizeVietnameseKeyword(searchIntent.effectiveKeyword)]);
-    const effectiveDistrictSlug = chosenSuggestion?.districtSlug || searchIntent.effectiveDistrictSlug;
+      : uniqueKeywords([keyword.trim(), normalizeVietnameseKeyword(keyword)]);
+    const effectiveDistrictSlug = chosenSuggestion?.districtSlug || districtSlug;
 
     setLoading(true);
     try {
@@ -516,7 +445,7 @@ export function HomeRealtime({
     } finally {
       setLoading(false);
     }
-  }, [areaMax, areaMin, priceMax, priceMin, propertyType, searchIntent, selectedSuggestion]);
+  }, [areaMax, areaMin, districtSlug, keyword, priceMax, priceMin, propertyType, selectedSuggestion]);
 
   const onSubmitFilters = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
