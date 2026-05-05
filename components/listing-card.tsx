@@ -81,7 +81,6 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
               src={toDisplayImageSrc(mainImage)}
               alt={listing.title}
               fill
-              unoptimized
               className="object-cover"
               sizes="(max-width: 640px) 100vw, (max-width: 1280px) 66vw, 33vw"
               onError={() => markFailed(mainImage)}
@@ -98,7 +97,6 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
                 src={toDisplayImageSrc(src)}
                 alt={`${listing.title} ${index + 2}`}
                 fill
-                unoptimized
                 className="object-cover"
                 sizes="(max-width: 640px) 25vw, 120px"
                 onError={() => markFailed(src)}
@@ -116,7 +114,6 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
               src={toDisplayImageSrc(mainImage)}
               alt={listing.title}
               fill
-              unoptimized
               className="object-cover"
               sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
               onError={() => markFailed(mainImage)}

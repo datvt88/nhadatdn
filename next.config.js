@@ -18,6 +18,8 @@ function parseAbsoluteApiBase(raw) {
 
 const publicApiBase = process.env.NEXT_PUBLIC_API_BASE || '/api';
 const parsedPublicApiBase = parseAbsoluteApiBase(publicApiBase);
+const imageCdnBase = process.env.NEXT_PUBLIC_IMAGE_CDN_BASE || '';
+const parsedImageCdnBase = parseAbsoluteApiBase(imageCdnBase);
 const apiProxyOrigin = trimTrailingSlash(process.env.API_PROXY_ORIGIN || parsedPublicApiBase?.origin || 'http://public-api:3002');
 const apiProxyBasePath = trimTrailingSlash(process.env.API_PROXY_BASE_PATH || parsedPublicApiBase?.pathname || '/api') || '/api';
 const isProduction = process.env.NODE_ENV === 'production';
@@ -78,15 +80,23 @@ const nextConfig = {
     typedRoutes: true,
   },
   images: {
-    unoptimized: true,
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 60 * 60 * 24 * 7,
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'nhadatdn.net' },
+      { protocol: 'https', hostname: '**.r2.dev' },
       { protocol: 'http', hostname: 'localhost' },
       { protocol: 'http', hostname: '127.0.0.1' },
       { protocol: 'http', hostname: 'host.docker.internal' },
+      ...(parsedImageCdnBase
+        ? [
+            {
+              protocol: parsedImageCdnBase.origin.startsWith('https://') ? 'https' : 'http',
+              hostname: new URL(parsedImageCdnBase.origin).hostname,
+            },
+          ]
+        : []),
     ],
   },
   async rewrites() {
