@@ -174,6 +174,7 @@ async function uploadImagesWithFallback(
 ): Promise<Response> {
   const candidates = buildUploadApiCandidates(path);
   let lastError: unknown = null;
+  let lastResponse: Response | null = null;
 
   for (const target of candidates) {
     try {
@@ -185,15 +186,19 @@ async function uploadImagesWithFallback(
       });
 
       if (res.ok) return res;
-      if (res.status < 500 && res.status !== 404 && res.status !== 413) {
+      if (res.status === 413) {
         return res;
       }
+      lastResponse = res;
       lastError = new Error(`upload failed with status ${res.status}`);
     } catch (error) {
       lastError = error;
     }
   }
 
+  if (lastResponse) {
+    return lastResponse;
+  }
   if (lastError instanceof Error) throw lastError;
   throw new Error('upload request failed');
 }
