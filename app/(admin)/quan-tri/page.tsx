@@ -45,6 +45,13 @@ type AuthProvidersConfig = {
   error?: string;
 };
 
+type GlobalGoogleTagConfig = {
+  enabled: boolean;
+  googleTagId: string;
+  updatedAt: string;
+  error?: string;
+};
+
 type ModerationAIConfig = {
   enabled: boolean;
   endpoint: string;
@@ -135,6 +142,8 @@ export default function AdminHomePage() {
 
   const [authProvidersConfig, setAuthProvidersConfig] = useState<AuthProvidersConfig>({ googleEnabled: false, googleClientId: '', updatedAt: '' });
   const [savingAuthProvidersConfig, setSavingAuthProvidersConfig] = useState(false);
+  const [globalGoogleTagConfig, setGlobalGoogleTagConfig] = useState<GlobalGoogleTagConfig>({ enabled: false, googleTagId: '', updatedAt: '' });
+  const [savingGlobalGoogleTagConfig, setSavingGlobalGoogleTagConfig] = useState(false);
 
   const [aiConfig, setAiConfig] = useState<ModerationAIConfig>(emptyModerationAIConfig);
   const [aiApiKeyInput, setAiApiKeyInput] = useState('');
@@ -221,6 +230,73 @@ export default function AdminHomePage() {
       });
     } catch {
       setMessage('Không thể tải cấu hình Google đăng nhập.');
+    }
+  }
+
+  async function loadGlobalGoogleTagConfig() {
+    if (!hasAdminAccess(user?.role)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/tracking/global`, {
+        headers: authHeaders(readAuthUser()),
+        cache: 'no-store',
+      });
+      const payload = (await res.json().catch(() => ({}))) as GlobalGoogleTagConfig;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi tải cấu hình Google tag toàn site: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setGlobalGoogleTagConfig({
+        enabled: Boolean(payload.enabled),
+        googleTagId: typeof payload.googleTagId === 'string' ? payload.googleTagId : '',
+        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
+      });
+    } catch {
+      setMessage('Không thể tải cấu hình Google tag toàn site.');
+    }
+  }
+
+  async function saveGlobalGoogleTagConfig() {
+    if (!hasAdminAccess(user?.role) || savingGlobalGoogleTagConfig) {
+      return;
+    }
+
+    setSavingGlobalGoogleTagConfig(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/tracking/global`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          ...authHeaders(readAuthUser()),
+        },
+        body: JSON.stringify({
+          enabled: Boolean(globalGoogleTagConfig.enabled),
+          googleTagId: globalGoogleTagConfig.googleTagId.trim(),
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as GlobalGoogleTagConfig;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi lưu Google tag toàn site: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setGlobalGoogleTagConfig({
+        enabled: Boolean(payload.enabled),
+        googleTagId: typeof payload.googleTagId === 'string' ? payload.googleTagId : '',
+        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
+      });
+      setMessage('Đã cập nhật Google tag toàn site cho toàn bộ webapp.');
+    } catch {
+      setMessage('Không thể lưu Google tag toàn site.');
+    } finally {
+      setSavingGlobalGoogleTagConfig(false);
     }
   }
 
@@ -454,6 +530,7 @@ export default function AdminHomePage() {
     if (hydrated && hasAdminAccess(user?.role)) {
       void loadDashboard();
       void loadAuthProvidersConfig();
+      void loadGlobalGoogleTagConfig();
       void loadModerationAIConfig();
       void loadR2StorageConfig();
     }
@@ -497,6 +574,7 @@ export default function AdminHomePage() {
               onClick={() => {
                 void loadDashboard();
                 void loadAuthProvidersConfig();
+                void loadGlobalGoogleTagConfig();
                 void loadModerationAIConfig();
                 void loadR2StorageConfig();
               }}
@@ -563,6 +641,54 @@ export default function AdminHomePage() {
             </ul>
           </article>
         </div>
+
+        <article className="neo-panel mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Google tag toàn site</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Cấu hình G-tag có hiệu lực cho toàn bộ webapp. Cấu hình này chạy song song với `Google Ads key` và `Facebook Ads key`
+            trong dashboard từng user, không ghi đè các key theo tài khoản.
+          </p>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[220px,1fr,180px] lg:items-end">
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={Boolean(globalGoogleTagConfig.enabled)}
+                onChange={(event) =>
+                  setGlobalGoogleTagConfig((prev) => ({
+                    ...prev,
+                    enabled: event.target.checked,
+                  }))
+                }
+              />
+              Bật Google tag toàn site
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Google tag ID</span>
+              <input
+                value={globalGoogleTagConfig.googleTagId}
+                onChange={(event) =>
+                  setGlobalGoogleTagConfig((prev) => ({
+                    ...prev,
+                    googleTagId: event.target.value.toUpperCase(),
+                  }))
+                }
+                placeholder="Ví dụ: G-XXXXXXX hoặc AW-XXXXXXX"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void saveGlobalGoogleTagConfig()}
+              disabled={savingGlobalGoogleTagConfig}
+              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-60"
+            >
+              {savingGlobalGoogleTagConfig ? 'Đang lưu...' : 'Lưu G-tag'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Cập nhật gần nhất: {globalGoogleTagConfig.updatedAt ? new Date(globalGoogleTagConfig.updatedAt).toLocaleString('vi-VN') : 'chưa có'}
+          </p>
+        </article>
 
         <article className="neo-panel mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Cấu hình AI kiểm duyệt</h2>

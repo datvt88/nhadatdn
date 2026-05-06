@@ -1,7 +1,14 @@
 ﻿import { Montserrat } from 'next/font/google';
+import Script from 'next/script';
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { fetchJsonOr } from '../lib/api';
 import { getSiteUrl } from '../lib/seo';
+
+type GlobalGoogleTagConfig = {
+  enabled?: boolean;
+  googleTagId?: string;
+};
 
 const montserrat069ab3 = Montserrat({
   subsets: ['latin', 'vietnamese'],
@@ -50,11 +57,35 @@ export const viewport: Viewport = {
   themeColor: '#28bdbf',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const trackingConfig = await fetchJsonOr<GlobalGoogleTagConfig>(
+    '/tracking/global',
+    { enabled: false, googleTagId: '' },
+    { cache: 'no-store' },
+  );
+  const googleTagId = typeof trackingConfig.googleTagId === 'string' ? trackingConfig.googleTagId.trim() : '';
+  const googleTagEnabled = Boolean(trackingConfig.enabled) && googleTagId.length > 0;
+
   return (
     <html lang="vi">
-      <body className={montserrat069ab3.variable}>{children}</body>
+      <body className={montserrat069ab3.variable}>
+        {googleTagEnabled ? (
+          <>
+            <Script async src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(googleTagId)}`} strategy="afterInteractive" />
+            <Script
+              id="nhadatdn-google-tag"
+              strategy="afterInteractive"
+              dangerouslySetInnerHTML={{
+                __html: `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', ${JSON.stringify(googleTagId)});`,
+              }}
+            />
+          </>
+        ) : null}
+        {children}
+      </body>
     </html>
   );
 }
-
