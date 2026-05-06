@@ -18,6 +18,7 @@ type DistrictItem = { id: number; name: string; slug: string; sortOrder: number;
 type DanangCatalog = { cityId: number; cityName: string; citySlug: string; districts: DistrictItem[] };
 type AddressSuggestion = { label: string; lat?: number; lng?: number };
 type StatusTone = 'error' | 'success' | 'info';
+type SessionPayload = { user?: AuthUser; sessionToken?: string; error?: string };
 type FieldKey =
   | 'title'
   | 'description'
@@ -223,6 +224,12 @@ function mapServerErrorToField(message: string): FieldErrors {
   return errors;
 }
 
+function isExpiredSessionError(errorText: string | undefined): boolean {
+  const lower = String(errorText ?? '').trim().toLowerCase();
+  if (!lower) return false;
+  return lower.includes('invalid or expired session') || lower.includes('unauthorized') || lower.includes('session');
+}
+
 export default function PostListingDanangPage() {
   const [status, setStatus] = useState<{ tone: StatusTone; message: string } | null>(null);
   const [user, setUser] = useState<AuthUser | null>(() => readAuthUser());
@@ -255,6 +262,47 @@ export default function PostListingDanangPage() {
     setPosterName(user?.fullName ?? '');
     setContactPhone(user?.phone ?? '');
   }, [user?.fullName, user?.phone]);
+
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      return () => {};
+    }
+
+    const syncSession = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          cache: 'no-store',
+          credentials: 'include',
+          headers: authHeaders(user),
+        });
+        const payload = (await res.json().catch(() => ({}))) as SessionPayload;
+        if (!active) return;
+        if (!res.ok || !payload.user) {
+          if (isExpiredSessionError(payload.error)) {
+            writeAuthUser(null);
+            setUser(null);
+            setStatus({ tone: 'info', message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để đăng tin.' });
+          }
+          return;
+        }
+        const nextUser: AuthUser = {
+          ...user,
+          ...payload.user,
+          ...(typeof payload.sessionToken === 'string' && payload.sessionToken.trim() !== '' ? { sessionToken: payload.sessionToken } : {}),
+        };
+        writeAuthUser(nextUser);
+        setUser(nextUser);
+      } catch {
+        return;
+      }
+    };
+
+    void syncSession();
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -357,6 +405,7 @@ export default function PostListingDanangPage() {
     setStatus(null);
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ identifier, password }),
     });
@@ -367,9 +416,55 @@ export default function PostListingDanangPage() {
       return;
     }
 
-    setUser(payload.user);
-    writeAuthUser({ ...payload.user, ...(typeof payload.sessionToken === 'string' && payload.sessionToken.trim() !== '' ? { sessionToken: payload.sessionToken } : {}) });
+    const nextUser: AuthUser = {
+      ...payload.user,
+      ...(typeof payload.sessionToken === 'string' && payload.sessionToken.trim() !== '' ? { sessionToken: payload.sessionToken } : {}),
+    };
+    setUser(nextUser);
+    writeAuthUser(nextUser);
     setStatus({ tone: 'success', message: `Đăng nhập thành công: ${payload.user.fullName}` });
+  }
+
+  async function ensureActiveSession(currentUser: AuthUser | null, reason: 'upload' | 'submit'): Promise<AuthUser | null> {
+    if (!currentUser) {
+      setStatus({ tone: 'error', message: 'Vui lòng đăng nhập trước khi đăng tin.' });
+      return null;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: authHeaders(currentUser),
+      });
+      const payload = (await res.json().catch(() => ({}))) as SessionPayload;
+      if (!res.ok || !payload.user) {
+        if (isExpiredSessionError(payload.error)) {
+          writeAuthUser(null);
+          setUser(null);
+          setStatus({
+            tone: 'error',
+            message:
+              reason === 'upload'
+                ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi tải ảnh.'
+                : 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi đăng tin.',
+          });
+          return null;
+        }
+        return currentUser;
+      }
+
+      const nextUser: AuthUser = {
+        ...currentUser,
+        ...payload.user,
+        ...(typeof payload.sessionToken === 'string' && payload.sessionToken.trim() !== '' ? { sessionToken: payload.sessionToken } : {}),
+      };
+      writeAuthUser(nextUser);
+      setUser(nextUser);
+      return nextUser;
+    } catch {
+      return currentUser;
+    }
   }
 
   async function uploadFiles(files: FileList | null) {
@@ -396,10 +491,16 @@ export default function PostListingDanangPage() {
     const form = new FormData();
     incoming.forEach((file) => form.append('images', file));
 
+    const activeUser = await ensureActiveSession(user, 'upload');
+    if (!activeUser) {
+      setFieldErrors((prev) => ({ ...prev, images: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }));
+      return;
+    }
+
     setUploading(true);
     let res: Response;
     try {
-      res = await uploadImagesWithFallback('/uploads/images', form, authHeaders(user));
+      res = await uploadImagesWithFallback('/uploads/images', form, authHeaders(activeUser));
     } catch {
       setUploading(false);
       setFieldErrors((prev) => ({ ...prev, images: 'Không kết nối được dịch vụ upload ảnh.' }));
@@ -454,6 +555,10 @@ export default function PostListingDanangPage() {
       setStatus({ tone: 'error', message: 'Vui lòng đăng nhập trước khi đăng tin.' });
       return;
     }
+    const activeUser = await ensureActiveSession(user, 'submit');
+    if (!activeUser) {
+      return;
+    }
     if (!catalog) {
       setStatus({ tone: 'error', message: 'Danh mục phường/xã chưa tải xong.' });
       return;
@@ -495,7 +600,7 @@ export default function PostListingDanangPage() {
     }
 
     const payload = {
-      userId: user.id,
+      userId: activeUser.id,
       title,
       description,
       price,
@@ -520,7 +625,8 @@ export default function PostListingDanangPage() {
 
     const res = await fetch(`${API_BASE}/listings`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...authHeaders(user) },
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', ...authHeaders(activeUser) },
       body: JSON.stringify(payload),
     });
 
@@ -535,8 +641,8 @@ export default function PostListingDanangPage() {
       return;
     }
 
-    const newBalance = Number(data.beanBalance ?? user.beanBalance - beanCost);
-    const freeRemain = packageType === 'FREE' ? Math.max(0, (user.freePostsRemaining ?? 0) - 1) : user.freePostsRemaining ?? 0;
+    const newBalance = Number(data.beanBalance ?? activeUser.beanBalance - beanCost);
+    const freeRemain = packageType === 'FREE' ? Math.max(0, (activeUser.freePostsRemaining ?? 0) - 1) : activeUser.freePostsRemaining ?? 0;
 
     setUser((prev) => {
       if (!prev) return prev;
