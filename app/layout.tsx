@@ -1,6 +1,7 @@
 ﻿import { Montserrat } from 'next/font/google';
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { getSiteUrl } from '../lib/seo';
 
 const montserrat069ab3 = Montserrat({
   subsets: ['latin', 'vietnamese'],
@@ -10,7 +11,7 @@ const montserrat069ab3 = Montserrat({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://nhadatdn.net'),
+  metadataBase: new URL(getSiteUrl()),
   title: {
     default: 'Nhà đất Đà Nẵng - Mua bán & cho thuê nhà đất Đà Nẵng',
     template: '%s | NhadatDN',
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     locale: 'vi_VN',
     title: 'Nhà đất Đà Nẵng - Mua bán & cho thuê nhà đất Đà Nẵng',
     description: 'Khám phá tin đăng mua bán và cho thuê nhà đất Đà Nẵng mới nhất với dữ liệu realtime.',
-    url: '/',
+    url: getSiteUrl(),
     siteName: 'NhadatDN',
     images: [{ url: '/logo-nhadatdn.svg', width: 512, height: 512, alt: 'NhadatDN' }],
   },
@@ -37,6 +38,9 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
+  },
+  verification: {
+    google: 'XQHaOfNN7YXc5kixBK2wF4ry4vUOTRB2dl3CGPfmqXI',
   },
 };
 
