@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { HeaderNav } from '../../../components/header-nav';
 import { API_BASE } from '../../../lib/api';
@@ -18,9 +18,12 @@ type MyListingItem = {
   packageType: string;
   status: string;
   userId: number;
+  dealType?: string;
+  propertyType?: string;
   createdAt: string;
 };
 
+type UploadedImage = { url: string; size: number };
 type EditListingDraft = {
   id: number;
   slug: string;
@@ -30,17 +33,30 @@ type EditListingDraft = {
   area: string;
   bedrooms: string;
   bathrooms: string;
+  districtId: string;
+  wardId: string;
   address: string;
+  dealType: 'can-ban' | 'can-mua' | 'cho-thue';
+  propertyType: string;
+  houseDirection: string;
+  frontage: string;
+  roadWidth: string;
+  floors: string;
   contactName: string;
   contactPhone: string;
+  images: UploadedImage[];
 };
 type AddressSuggestion = { label: string; lat?: number; lng?: number };
-type WardCatalogItem = { id: number; name: string };
-type DistrictCatalogItem = { id: number; name: string; wards: WardCatalogItem[] };
-type DanangCatalog = { cityName?: string; districts?: DistrictCatalogItem[] };
+type WardCatalogItem = { id: number; name: string; slug?: string };
+type DistrictCatalogItem = { id: number; name: string; slug?: string; wards: WardCatalogItem[] };
+type DanangCatalog = { cityId?: number; cityName?: string; districts?: DistrictCatalogItem[] };
 type ViewStatus = 'all' | 'active-sale' | 'sold' | 'active-rent' | 'rented';
+type UploadResult = { items?: Array<{ url?: string; size?: number }> };
+type SessionPayload = { user?: AuthUser; sessionToken?: string; error?: string };
 
 const USER_LISTING_EDIT_WINDOW_DAYS = 30;
+const HOUSE_DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Tây Bắc', 'Đông Bắc', 'Tây Nam', 'Đông Nam'] as const;
+const PROPERTY_TYPES = ['Nhà mặt tiền', 'Nhà kiệt, hẻm', 'Biệt thự, nhà liền kề', 'Căn hộ chung cư', 'Nhà trọ, phòng trọ', 'Cửa hàng, kho, xưởng', 'Nhà hàng, khách sạn', 'Đất thổ cư', 'Đất nền, đất dự án', 'Đất nông nghiệp', 'Trang trại, khu sinh thái', 'Các loại khác'] as const;
 
 const packageGuide = [
   { packageType: 'FREE', beanCost: 0, note: 'Tin thường miễn phí, trừ 1 lượt FREE trong quota tài khoản' },
@@ -48,8 +64,12 @@ const packageGuide = [
   { packageType: 'VIP', beanCost: 50, note: 'Tin VIP ưu tiên hiển thị, trừ 50 Bean/tin' },
 ] as const;
 
-function statusOptionsForTitle(title: string): Array<{ value: 'ACTIVE' | 'SOLD' | 'RENTED'; label: string }> {
-  const dealType = resolveDealType(title);
+function resolveListingDealType(item: Pick<MyListingItem, 'title' | 'dealType'>): 'can-ban' | 'can-mua' | 'cho-thue' {
+  return resolveDealType(item.title, item.dealType);
+}
+
+function statusOptionsForListing(item: Pick<MyListingItem, 'title' | 'dealType'>): Array<{ value: 'ACTIVE' | 'SOLD' | 'RENTED'; label: string }> {
+  const dealType = resolveListingDealType(item);
   if (dealType === 'cho-thue') {
     return [
       { value: 'ACTIVE', label: 'Đang cho thuê' },
@@ -65,7 +85,7 @@ function statusOptionsForTitle(title: string): Array<{ value: 'ACTIVE' | 'SOLD' 
 function toViewStatus(item: MyListingItem): ViewStatus {
   if (item.status === 'SOLD') return 'sold';
   if (item.status === 'RENTED') return 'rented';
-  return resolveDealType(item.title) === 'cho-thue' ? 'active-rent' : 'active-sale';
+  return resolveListingDealType(item) === 'cho-thue' ? 'active-rent' : 'active-sale';
 }
 
 function inDateRange(item: MyListingItem, fromDate: string, toDate: string): boolean {
@@ -109,6 +129,90 @@ function normalizeSearchText(value: string): string {
     .toLowerCase()
     .trim();
 }
+
+function normalizeDecimalInput(raw: string): string {
+  const cleaned = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/tỷ|ty/g, '')
+    .replace(/\s+/g, '')
+    .replace(/,/g, '.');
+  const dots = cleaned.match(/\./g);
+  if (!dots || dots.length <= 1) return cleaned;
+  const lastDot = cleaned.lastIndexOf('.');
+  return `${cleaned.slice(0, lastDot).replace(/\./g, '')}${cleaned.slice(lastDot)}`;
+}
+
+function parsePositiveDecimal(raw: string): number | null {
+  const normalized = normalizeDecimalInput(raw);
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+function parseOptionalDecimal(raw: string): number | undefined {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) return undefined;
+  return parsePositiveDecimal(trimmed) ?? undefined;
+}
+
+function parseNonNegativeInt(raw: string): number | null {
+  const normalized = normalizeDecimalInput(raw);
+  if (!normalized) return 0;
+  if (!/^\d+$/.test(normalized)) return null;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
+function normalizePhone(raw: string): string {
+  return String(raw ?? '').replace(/[^0-9]/g, '');
+}
+
+function buildUploadApiCandidates(path: string): string[] {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const addCandidate = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  const publicBase = (process.env.NEXT_PUBLIC_API_BASE ?? '').trim().replace(/\/+$/, '');
+  if (typeof window !== 'undefined' && /^https?:\/\//i.test(publicBase)) {
+    addCandidate(`${publicBase}${normalizedPath}`);
+  }
+  addCandidate(`${API_BASE}${normalizedPath}`);
+  addCandidate(`/api${normalizedPath}`);
+  return candidates;
+}
+
+async function uploadImagesWithFallback(path: string, form: FormData, headers: Record<string, string>): Promise<Response> {
+  const candidates = buildUploadApiCandidates(path);
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
+  for (const target of candidates) {
+    try {
+      const res = await fetch(target, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: form,
+      });
+      if (res.ok || res.status === 413) return res;
+      lastResponse = res;
+      lastError = new Error(`upload failed with status ${res.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastResponse) return lastResponse;
+  if (lastError instanceof Error) throw lastError;
+  throw new Error('upload request failed');
+}
 export default function AccountHomePage() {
   const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
@@ -126,9 +230,13 @@ export default function AccountHomePage() {
   const [message, setMessage] = useState('');
   const [editingDraft, setEditingDraft] = useState<EditListingDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingListingId, setDeletingListingId] = useState<number | null>(null);
+  const [editUploading, setEditUploading] = useState(false);
+  const [editDragActive, setEditDragActive] = useState(false);
   const [editAddressSuggestions, setEditAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [editAddressLoading, setEditAddressLoading] = useState(false);
   const [danangCatalog, setDanangCatalog] = useState<DanangCatalog | null>(null);
+  const editFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const syncUser = (): void => {
@@ -232,6 +340,29 @@ export default function AccountHomePage() {
       active = false;
     };
   }, []);
+
+  const selectedEditDistrict = useMemo(() => {
+    const districtValue = Number(editingDraft?.districtId ?? '');
+    if (!districtValue || !danangCatalog?.districts?.length) return null;
+    return danangCatalog.districts.find((item) => item.id === districtValue) ?? null;
+  }, [danangCatalog, editingDraft?.districtId]);
+
+  useEffect(() => {
+    if (!editingDraft) return;
+    if (!selectedEditDistrict) {
+      if (editingDraft.wardId !== '') {
+        setEditingDraft((prev) => (prev && prev.id === editingDraft.id ? { ...prev, wardId: '' } : prev));
+      }
+      return;
+    }
+    const wardExists = selectedEditDistrict.wards.some((item) => String(item.id) === editingDraft.wardId);
+    if (wardExists) return;
+    const nextWard = selectedEditDistrict.wards[0];
+    setEditingDraft((prev) => {
+      if (!prev || prev.id !== editingDraft.id) return prev;
+      return { ...prev, wardId: nextWard ? String(nextWard.id) : '' };
+    });
+  }, [editingDraft, selectedEditDistrict]);
 
   function buildWardAddressHints(keyword: string): AddressSuggestion[] {
     const query = normalizeSearchText(keyword);
@@ -400,6 +531,49 @@ export default function AccountHomePage() {
     await loadMyListings(user);
   }
 
+  async function ensureActiveSession(currentUser: AuthUser | null, reason: 'upload' | 'edit' | 'delete'): Promise<AuthUser | null> {
+    if (!currentUser) {
+      setMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      return null;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: authHeaders(currentUser),
+      });
+      const payload = (await res.json().catch(() => ({}))) as SessionPayload;
+      if (!res.ok || !payload.user) {
+        if (isExpiredSessionError(payload.error)) {
+          writeAuthUser(null);
+          setUser(null);
+          router.replace('/dang-nhap?next=/tai-khoan');
+          setMessage(
+            reason === 'upload'
+              ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi tải ảnh.'
+              : reason === 'delete'
+                ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi xóa tin.'
+                : 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi lưu thay đổi.',
+          );
+          return null;
+        }
+        return currentUser;
+      }
+
+      const nextUser: AuthUser = {
+        ...currentUser,
+        ...payload.user,
+        ...(typeof payload.sessionToken === 'string' && payload.sessionToken.trim() !== '' ? { sessionToken: payload.sessionToken } : {}),
+      };
+      writeAuthUser(nextUser);
+      setUser(nextUser);
+      return nextUser;
+    } catch {
+      return currentUser;
+    }
+  }
+
 
   async function openEditListing(listing: MyListingItem) {
     if (!user) return;
@@ -420,6 +594,15 @@ export default function AccountHomePage() {
       area?: number;
       bedrooms?: number;
       bathrooms?: number;
+      district?: { name?: string };
+      ward?: { name?: string };
+      dealType?: string;
+      propertyType?: string;
+      houseDirection?: string;
+      frontage?: number;
+      roadWidth?: number;
+      floors?: number;
+      images?: Array<{ url?: string; webpUrl?: string }>;
       address?: string;
       contact?: { fullName?: string; phone?: string };
       error?: string;
@@ -428,6 +611,17 @@ export default function AccountHomePage() {
       setMessage(`Lỗi tải dữ liệu tin #${listing.id}: ${String(payload.error ?? 'unknown')}`);
       return;
     }
+
+    const districtName = String(payload.district?.name ?? '').trim().toLowerCase();
+    const wardName = String(payload.ward?.name ?? '').trim().toLowerCase();
+    const matchedDistrict = danangCatalog?.districts?.find((item) => item.name.trim().toLowerCase() === districtName) ?? null;
+    const matchedWard = matchedDistrict?.wards?.find((item) => item.name.trim().toLowerCase() === wardName) ?? null;
+    const initialImages = Array.isArray(payload.images)
+      ? payload.images
+          .map((item) => String(item?.url ?? '').trim())
+          .filter((value) => value.length > 0)
+          .map((url) => ({ url, size: 0 }))
+      : [];
 
     setEditingDraft({
       id: listing.id,
@@ -438,33 +632,177 @@ export default function AccountHomePage() {
       area: String(payload.area ?? listing.area ?? ''),
       bedrooms: String(payload.bedrooms ?? 0),
       bathrooms: String(payload.bathrooms ?? 0),
+      districtId: matchedDistrict ? String(matchedDistrict.id) : '',
+      wardId: matchedWard ? String(matchedWard.id) : '',
       address: String(payload.address ?? ''),
+      dealType: payload.dealType === 'cho-thue' ? 'cho-thue' : payload.dealType === 'can-mua' ? 'can-mua' : 'can-ban',
+      propertyType: String(payload.propertyType ?? listing.propertyType ?? PROPERTY_TYPES[0]),
+      houseDirection: String(payload.houseDirection ?? ''),
+      frontage: payload.frontage == null ? '' : String(payload.frontage),
+      roadWidth: payload.roadWidth == null ? '' : String(payload.roadWidth),
+      floors: payload.floors == null ? '' : String(payload.floors),
       contactName: String(payload.contact?.fullName ?? user.fullName ?? ''),
       contactPhone: String(payload.contact?.phone ?? user.phone ?? ''),
+      images: initialImages,
     });
     setEditAddressSuggestions([]);
   }
 
+  async function uploadEditFiles(files: FileList | null) {
+    if (!files || files.length === 0 || !editingDraft) return;
+    if (editUploading) {
+      setMessage('Hệ thống đang tải ảnh trước đó. Vui lòng chờ hoàn tất rồi thử lại.');
+      return;
+    }
+
+    const incoming = Array.from(files);
+    if (editingDraft.images.length + incoming.length > 10) {
+      setMessage('Tối đa 10 ảnh cho mỗi tin đăng.');
+      return;
+    }
+
+    const currentTotalSize = editingDraft.images.reduce((sum, item) => sum + item.size, 0);
+    const incomingTotalSize = incoming.reduce((sum, file) => sum + file.size, 0);
+    if (currentTotalSize + incomingTotalSize > 50 * 1024 * 1024) {
+      setMessage('Tổng dung lượng ảnh vượt quá 50MB.');
+      return;
+    }
+
+    const activeUser = await ensureActiveSession(user, 'upload');
+    if (!activeUser) return;
+
+    const form = new FormData();
+    incoming.forEach((file) => form.append('images', file));
+
+    setEditUploading(true);
+    let res: Response;
+    try {
+      res = await uploadImagesWithFallback('/uploads/images', form, authHeaders(activeUser));
+    } catch {
+      setEditUploading(false);
+      setMessage('Upload ảnh thất bại: không kết nối được backend.');
+      return;
+    }
+    setEditUploading(false);
+
+    const payload = (await res.json().catch(() => ({}))) as UploadResult & { error?: string };
+    if (!res.ok) {
+      setMessage(`Upload ảnh thất bại: ${String(payload.error ?? 'không rõ lỗi')}`);
+      return;
+    }
+
+    const nextItems = (payload.items ?? [])
+      .map((item) => ({ url: String(item.url ?? '').trim(), size: Number(item.size ?? 0) }))
+      .filter((item) => item.url.length > 0);
+
+    setEditingDraft((prev) => {
+      if (!prev) return prev;
+      return { ...prev, images: [...prev.images, ...nextItems].slice(0, 10) };
+    });
+    setMessage(`Upload thành công ${nextItems.length} ảnh.`);
+  }
+
+  function removeEditImage(url: string) {
+    setEditingDraft((prev) => (prev ? { ...prev, images: prev.images.filter((item) => item.url !== url) } : prev));
+  }
+
+  function handleEditDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (editUploading) return;
+    setEditDragActive(true);
+  }
+
+  function handleEditDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setEditDragActive(false);
+  }
+
+  function handleEditDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setEditDragActive(false);
+    if (editUploading) return;
+    void uploadEditFiles(event.dataTransfer.files);
+  }
+
   async function saveListingEdit() {
     if (!user || !editingDraft || savingEdit) return;
+    const activeUser = await ensureActiveSession(user, 'edit');
+    if (!activeUser) return;
+
+    const price = parsePositiveDecimal(editingDraft.price);
+    const area = parsePositiveDecimal(editingDraft.area);
+    const bedrooms = parseNonNegativeInt(editingDraft.bedrooms);
+    const bathrooms = parseNonNegativeInt(editingDraft.bathrooms);
+    const districtValue = Number(editingDraft.districtId);
+    const wardValue = Number(editingDraft.wardId);
+    const frontage = parseOptionalDecimal(editingDraft.frontage);
+    const roadWidth = parseOptionalDecimal(editingDraft.roadWidth);
+    const floors = editingDraft.floors.trim() === '' ? undefined : parseNonNegativeInt(editingDraft.floors);
+    const contactPhone = normalizePhone(editingDraft.contactPhone);
+
+    if (!editingDraft.title.trim()) {
+      setMessage('Tiêu đề không được để trống.');
+      return;
+    }
+    if (!editingDraft.description.trim()) {
+      setMessage('Mô tả không được để trống.');
+      return;
+    }
+    if (price === null || area === null || bedrooms === null || bathrooms === null) {
+      setMessage('Giá, diện tích, phòng ngủ hoặc phòng tắm chưa hợp lệ.');
+      return;
+    }
+    if (!districtValue || !wardValue) {
+      setMessage('Vui lòng chọn đầy đủ quận và phường/xã.');
+      return;
+    }
+    if (!editingDraft.address.trim()) {
+      setMessage('Địa chỉ không được để trống.');
+      return;
+    }
+    if (floors === null) {
+      setMessage('Số tầng chưa hợp lệ.');
+      return;
+    }
+    if (contactPhone.length > 0 && contactPhone.length < 8) {
+      setMessage('Số điện thoại liên hệ chưa hợp lệ.');
+      return;
+    }
+    if (editingDraft.images.length === 0) {
+      setMessage('Tin đăng cần ít nhất 1 hình ảnh.');
+      return;
+    }
+
     setSavingEdit(true);
-    const res = await fetch(`${API_BASE}/users/${user.id}/listings/${editingDraft.id}`, {
+    const res = await fetch(`${API_BASE}/users/${activeUser.id}/listings/${editingDraft.id}`, {
       method: 'PATCH',
       credentials: 'include',
       headers: {
         'content-type': 'application/json',
-        ...authHeaders(user),
+        ...authHeaders(activeUser),
       },
       body: JSON.stringify({
         title: editingDraft.title.trim(),
         description: editingDraft.description.trim(),
-        price: Number(editingDraft.price),
-        area: Number(editingDraft.area),
-        bedrooms: Number(editingDraft.bedrooms),
-        bathrooms: Number(editingDraft.bathrooms),
+        price,
+        area,
+        bedrooms,
+        bathrooms,
+        districtId: districtValue,
+        wardId: wardValue,
         address: editingDraft.address.trim(),
+        dealType: editingDraft.dealType,
+        propertyType: editingDraft.propertyType,
+        houseDirection: editingDraft.houseDirection.trim(),
+        frontage,
+        roadWidth,
+        floors,
         contactName: editingDraft.contactName.trim(),
         contactPhone: editingDraft.contactPhone.trim(),
+        images: editingDraft.images.map((item) => ({ url: item.url })),
       }),
     });
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
@@ -476,8 +814,48 @@ export default function AccountHomePage() {
 
     setEditingDraft(null);
     setMessage(`Đã cập nhật tin #${editingDraft.id}`);
-    await loadMyListings(user);
-  }  if (!hydrated) {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const nextUser: AuthUser = {
+        ...prev,
+        fullName: editingDraft.contactName.trim() || prev.fullName,
+        phone: editingDraft.contactPhone.trim() || prev.phone || '',
+      };
+      writeAuthUser(nextUser);
+      return nextUser;
+    });
+    await loadMyListings(activeUser);
+  }
+
+  async function deleteListing(listing: MyListingItem) {
+    if (!user || deletingListingId !== null) return;
+    const confirmed = typeof window !== 'undefined'
+      ? window.confirm(`Xóa vĩnh viễn tin #${listing.id}?\n\nThao tác này sẽ xóa tin đăng và toàn bộ ảnh hiện có.`)
+      : false;
+    if (!confirmed) return;
+
+    const activeUser = await ensureActiveSession(user, 'delete');
+    if (!activeUser) return;
+
+    setDeletingListingId(listing.id);
+    const res = await fetch(`${API_BASE}/users/${activeUser.id}/listings/${listing.id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: authHeaders(activeUser),
+    });
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    setDeletingListingId(null);
+    if (!res.ok) {
+      setMessage(`Lỗi xóa tin #${listing.id}: ${String(payload.error ?? 'unknown')}`);
+      return;
+    }
+
+    setEditingDraft((prev) => (prev?.id === listing.id ? null : prev));
+    setMessage(`Đã xóa tin #${listing.id}`);
+    await loadMyListings(activeUser);
+  }
+
+  if (!hydrated) {
     return (
       <main>
         <HeaderNav />
@@ -662,9 +1040,9 @@ export default function AccountHomePage() {
               </thead>
               <tbody>
                 {filteredMyListings.map((item) => {
-                  const dealType = resolveDealType(item.title);
-                  const options = statusOptionsForTitle(item.title);
-                  const detailPath = buildListingPath({ slug: item.slug, title: item.title });
+                  const dealType = resolveListingDealType(item);
+                  const options = statusOptionsForListing(item);
+                  const detailPath = buildListingPath({ slug: item.slug, title: item.title, categoryHint: dealType });
                   const canEdit = isListingEditable(item.createdAt);
                   const editDeadline = formatEditDeadline(item.createdAt);
                   return (
@@ -682,7 +1060,7 @@ export default function AccountHomePage() {
                       </td>
                       <td className="px-3 py-2 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString('vi-VN')}</td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-2 whitespace-nowrap">
+                        <div className="flex flex-wrap items-center gap-2">
                           {canEdit ? (
                             <button
                               type="button"
@@ -710,6 +1088,14 @@ export default function AccountHomePage() {
                           >
                             Cập nhật
                           </button>
+                          <button
+                            type="button"
+                            className="h-9 shrink-0 rounded border border-red-300 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                            onClick={() => void deleteListing(item)}
+                            disabled={deletingListingId === item.id}
+                          >
+                            {deletingListingId === item.id ? 'Đang xóa...' : 'Xóa'}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -727,16 +1113,55 @@ export default function AccountHomePage() {
 
         {editingDraft ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-            <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+            <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
               <h3 className="text-lg font-semibold text-slate-900">Sửa tin #{editingDraft.id}</h3>
               <p className="mt-1 text-xs text-slate-500">Chỉ có thể sửa trong {USER_LISTING_EDIT_WINDOW_DAYS} ngày từ ngày đăng.</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <input className="rounded border border-slate-300 px-3 py-2 sm:col-span-2" value={editingDraft.title} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, title: e.target.value } : prev))} placeholder="Tiêu đề" />
-                <textarea className="rounded border border-slate-300 px-3 py-2 sm:col-span-2 min-h-24" value={editingDraft.description} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, description: e.target.value } : prev))} placeholder="Mô tả" />
-                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.price} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, price: e.target.value } : prev))} placeholder="Giá" />
-                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.area} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, area: e.target.value } : prev))} placeholder="Diện tích" />
-                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bedrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bedrooms: e.target.value } : prev))} placeholder="Phòng ngủ" />
-                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bathrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bathrooms: e.target.value } : prev))} placeholder="Phòng tắm" />
+                <select className="rounded border border-slate-300 px-3 py-2" value={editingDraft.dealType} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, dealType: e.target.value as EditListingDraft['dealType'] } : prev))}>
+                  <option value="can-ban">Cần bán</option>
+                  <option value="can-mua">Cần mua</option>
+                  <option value="cho-thue">Cho thuê</option>
+                </select>
+                <select className="rounded border border-slate-300 px-3 py-2" value={editingDraft.propertyType} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, propertyType: e.target.value } : prev))}>
+                  {PROPERTY_TYPES.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <textarea className="min-h-28 rounded border border-slate-300 px-3 py-2 sm:col-span-2" value={editingDraft.description} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, description: e.target.value } : prev))} placeholder="Mô tả" />
+                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.price} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, price: e.target.value } : prev))} placeholder="Giá (Tỷ)" />
+                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.area} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, area: e.target.value } : prev))} placeholder="Diện tích m2" />
+                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bedrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bedrooms: e.target.value } : prev))} placeholder="Số phòng ngủ" />
+                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bathrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bathrooms: e.target.value } : prev))} placeholder="Số phòng toilet" />
+                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.floors} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, floors: e.target.value } : prev))} placeholder="Số tầng" />
+                <select className="rounded border border-slate-300 px-3 py-2" value={editingDraft.houseDirection} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, houseDirection: e.target.value } : prev))}>
+                  <option value="">Hướng nhà đất</option>
+                  {HOUSE_DIRECTIONS.map((dir) => (
+                    <option key={dir} value={dir}>{dir}</option>
+                  ))}
+                </select>
+                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.frontage} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, frontage: e.target.value } : prev))} placeholder="Chiều ngang (m)" />
+                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.roadWidth} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, roadWidth: e.target.value } : prev))} placeholder="Đường vào (m)" />
+                <select
+                  className="rounded border border-slate-300 px-3 py-2"
+                  value={editingDraft.districtId}
+                  onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, districtId: e.target.value } : prev))}
+                >
+                  <option value="">Chọn quận/huyện</option>
+                  {danangCatalog?.districts?.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+                <select
+                  className="rounded border border-slate-300 px-3 py-2"
+                  value={editingDraft.wardId}
+                  onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, wardId: e.target.value } : prev))}
+                >
+                  <option value="">Chọn phường/xã</option>
+                  {(selectedEditDistrict?.wards ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
                 <div className="relative sm:col-span-2">
                   <input
                     className="w-full rounded border border-slate-300 px-3 py-2"
@@ -775,6 +1200,50 @@ export default function AccountHomePage() {
                 </div>
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.contactName} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, contactName: e.target.value } : prev))} placeholder="Người đăng" />
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.contactPhone} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, contactPhone: e.target.value } : prev))} placeholder="SĐT liên hệ" />
+              </div>
+
+              <div className="mt-4">
+                <div
+                  className={`rounded-xl border-2 border-dashed p-4 text-center transition ${editDragActive ? 'border-[var(--brand-primary)] bg-cyan-50' : 'border-slate-300 bg-slate-50'}`}
+                  onDragOver={handleEditDragOver}
+                  onDragLeave={handleEditDragLeave}
+                  onDrop={handleEditDrop}
+                >
+                  <input
+                    ref={editFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      void uploadEditFiles(e.target.files);
+                      e.currentTarget.value = '';
+                    }}
+                    disabled={editUploading}
+                  />
+                  <p className="text-sm font-medium text-slate-700">Kéo thả ảnh vào đây hoặc chọn ảnh để thêm vào tin đăng</p>
+                  <p className="mt-1 text-xs text-slate-500">Tối đa 10 ảnh, tổng dung lượng không quá 50MB.</p>
+                  <button type="button" className="mt-3 rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-white disabled:opacity-60" onClick={() => editFileInputRef.current?.click()} disabled={editUploading}>
+                    {editUploading ? 'Đang tải ảnh...' : 'Chọn ảnh'}
+                  </button>
+                </div>
+                {editingDraft.images.length > 0 ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {editingDraft.images.map((image) => (
+                      <div key={image.url} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <img src={image.url} alt="Ảnh tin đăng" className="h-40 w-full object-cover" />
+                        <div className="flex items-center justify-between gap-2 p-3">
+                          <span className="truncate text-xs text-slate-500">{image.url.split('/').pop()}</span>
+                          <button type="button" className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50" onClick={() => removeEditImage(image.url)}>
+                            Xóa ảnh
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">Tin đăng cần ít nhất 1 ảnh.</p>
+                )}
               </div>
               <div className="mt-4 flex justify-end gap-2">
                 <button type="button" className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700" onClick={() => setEditingDraft(null)} disabled={savingEdit}>Hủy</button>
