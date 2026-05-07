@@ -376,7 +376,7 @@ export default function AdminListingsPage() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'admin-listings-export.csv';
+    a.download = 'google-ads-real-estate-admin-listings.csv';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -493,7 +493,7 @@ export default function AdminListingsPage() {
 
         <div className="mt-4 flex flex-wrap gap-3">
           <button className="rounded bg-slate-900 px-4 py-2 text-white" onClick={() => void loadListings()}>Tải danh sách tin</button>
-          <button className="rounded border border-slate-300 px-4 py-2" onClick={() => void exportListings()}>Xuất Excel</button>
+            <button className="rounded border border-slate-300 px-4 py-2" onClick={() => void exportListings()}>Xuất CSV Google Ads</button>
         </div>
 
         <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

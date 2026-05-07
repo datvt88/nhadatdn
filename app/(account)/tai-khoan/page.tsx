@@ -34,6 +34,10 @@ type EditListingDraft = {
   contactName: string;
   contactPhone: string;
 };
+type AddressSuggestion = { label: string; lat?: number; lng?: number };
+type WardCatalogItem = { id: number; name: string };
+type DistrictCatalogItem = { id: number; name: string; wards: WardCatalogItem[] };
+type DanangCatalog = { cityName?: string; districts?: DistrictCatalogItem[] };
 type ViewStatus = 'all' | 'active-sale' | 'sold' | 'active-rent' | 'rented';
 
 const USER_LISTING_EDIT_WINDOW_DAYS = 30;
@@ -97,6 +101,14 @@ function isExpiredSessionError(errorText: string | undefined): boolean {
   if (!lower) return false;
   return lower.includes('invalid or expired session') || lower.includes('unauthorized') || lower.includes('session');
 }
+
+function normalizeSearchText(value: string): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
 export default function AccountHomePage() {
   const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
@@ -114,6 +126,9 @@ export default function AccountHomePage() {
   const [message, setMessage] = useState('');
   const [editingDraft, setEditingDraft] = useState<EditListingDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editAddressSuggestions, setEditAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [editAddressLoading, setEditAddressLoading] = useState(false);
+  const [danangCatalog, setDanangCatalog] = useState<DanangCatalog | null>(null);
 
   useEffect(() => {
     const syncUser = (): void => {
@@ -202,6 +217,104 @@ export default function AccountHomePage() {
     }
   }, [user]);
 
+  useEffect(() => {
+    let active = true;
+    const loadCatalog = async () => {
+      const res = await fetch(`${API_BASE}/locations/danang`, { cache: 'no-store' });
+      if (!res.ok || !active) return;
+      const payload = (await res.json().catch(() => null)) as DanangCatalog | null;
+      if (active && payload) {
+        setDanangCatalog(payload);
+      }
+    };
+    void loadCatalog();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function buildWardAddressHints(keyword: string): AddressSuggestion[] {
+    const query = normalizeSearchText(keyword);
+    if (!danangCatalog?.districts?.length) return [];
+    const seen = new Set<string>();
+    const output: AddressSuggestion[] = [];
+    for (const district of danangCatalog.districts) {
+      const districtName = String(district.name ?? '').trim();
+      for (const ward of district.wards ?? []) {
+        const wardName = String(ward.name ?? '').trim();
+        if (!wardName) continue;
+        const candidate = `${wardName}, ${districtName}, Đà Nẵng`;
+        const normalized = normalizeSearchText(candidate);
+        if (query.length > 0 && !normalized.includes(query)) continue;
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+        output.push({ label: candidate });
+        if (output.length >= 8) return output;
+      }
+    }
+    return output;
+  }
+
+  useEffect(() => {
+    const keyword = editingDraft?.address?.trim() ?? '';
+    if (keyword.length === 0) {
+      setEditAddressSuggestions(buildWardAddressHints(''));
+      setEditAddressLoading(false);
+      return;
+    }
+
+    if (keyword.length < 2) {
+      setEditAddressSuggestions(buildWardAddressHints(keyword));
+      setEditAddressLoading(false);
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        setEditAddressLoading(true);
+        const query = encodeURIComponent(keyword);
+        const res = await fetch(`${API_BASE}/locations/address-suggest?q=${query}&limit=6`, {
+          cache: 'no-store',
+        });
+        const remotePayload = (await res.json().catch(() => ({}))) as { items?: AddressSuggestion[] };
+        if (!active) return;
+        const remoteItems = Array.isArray(remotePayload.items)
+          ? remotePayload.items
+              .filter((item) => typeof item?.label === 'string' && item.label.trim().length > 0)
+              .map((item) => {
+                const mapped: AddressSuggestion = { label: String(item.label).trim() };
+                if (typeof item.lat === 'number') mapped.lat = item.lat;
+                if (typeof item.lng === 'number') mapped.lng = item.lng;
+                return mapped;
+              })
+          : [];
+        const localItems = buildWardAddressHints(keyword);
+        const dedupe = new Set<string>();
+        const merged: AddressSuggestion[] = [];
+        for (const item of [...localItems, ...remoteItems]) {
+          const key = item.label.toLowerCase();
+          if (dedupe.has(key)) continue;
+          dedupe.add(key);
+          merged.push(item);
+          if (merged.length >= 8) break;
+        }
+        setEditAddressSuggestions(merged);
+      } catch {
+        if (active) {
+          setEditAddressSuggestions(buildWardAddressHints(keyword));
+        }
+      } finally {
+        if (active) setEditAddressLoading(false);
+      }
+    }, 280);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [editingDraft?.address, danangCatalog]);
+
   async function saveTrackingSettings() {
     if (!user) return;
     const res = await fetch(`${API_BASE}/users/${user.id}/settings`, {
@@ -253,12 +366,12 @@ export default function AccountHomePage() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'my-listings-export.csv';
+    a.download = 'google-ads-real-estate-user-listings.csv';
     document.body.appendChild(a);
     a.click();
     a.remove();
     window.URL.revokeObjectURL(url);
-    setMessage('Đã xuất file Excel-compatible (CSV UTF-8).');
+    setMessage('Đã xuất file CSV chuẩn Google Ads bất động sản.');
   }
 
   async function updateMyListingStatus(listing: MyListingItem) {
@@ -329,6 +442,7 @@ export default function AccountHomePage() {
       contactName: String(payload.contact?.fullName ?? user.fullName ?? ''),
       contactPhone: String(payload.contact?.phone ?? user.phone ?? ''),
     });
+    setEditAddressSuggestions([]);
   }
 
   async function saveListingEdit() {
@@ -509,7 +623,7 @@ export default function AccountHomePage() {
             <h2 className="text-lg font-semibold text-slate-900">Tin đăng của tôi</h2>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="rounded border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => void exportMyListings()}>
-                Xuất Excel
+                Xuất CSV Google Ads
               </button>
               <button type="button" className="rounded border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => void loadMyListings(user)}>
                 Làm mới danh sách
@@ -623,7 +737,42 @@ export default function AccountHomePage() {
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.area} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, area: e.target.value } : prev))} placeholder="Diện tích" />
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bedrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bedrooms: e.target.value } : prev))} placeholder="Phòng ngủ" />
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bathrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bathrooms: e.target.value } : prev))} placeholder="Phòng tắm" />
-                <input className="rounded border border-slate-300 px-3 py-2 sm:col-span-2" value={editingDraft.address} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, address: e.target.value } : prev))} placeholder="Địa chỉ" />
+                <div className="relative sm:col-span-2">
+                  <input
+                    className="w-full rounded border border-slate-300 px-3 py-2"
+                    value={editingDraft.address}
+                    onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, address: e.target.value } : prev))}
+                    onFocus={() => {
+                      if (!editingDraft.address?.trim()) {
+                        setEditAddressSuggestions(buildWardAddressHints(''));
+                      }
+                    }}
+                    onBlur={() => window.setTimeout(() => setEditAddressSuggestions([]), 120)}
+                    placeholder="Địa chỉ"
+                    autoComplete="off"
+                  />
+                  {editAddressLoading && (editingDraft.address?.trim().length ?? 0) >= 2 ? (
+                    <p className="mt-1 text-xs text-slate-500">Đang gợi ý địa chỉ theo phường/xã Đà Nẵng...</p>
+                  ) : null}
+                  {editAddressSuggestions.length > 0 ? (
+                    <ul className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-56 overflow-auto rounded border border-slate-200 bg-white shadow-md">
+                      {editAddressSuggestions.map((item, index) => (
+                        <li key={`${item.label}-${index}`}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                            onClick={() => {
+                              setEditingDraft((prev) => (prev ? { ...prev, address: item.label } : prev));
+                              setEditAddressSuggestions([]);
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.contactName} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, contactName: e.target.value } : prev))} placeholder="Người đăng" />
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.contactPhone} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, contactPhone: e.target.value } : prev))} placeholder="SĐT liên hệ" />
               </div>
