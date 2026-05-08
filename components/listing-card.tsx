@@ -140,10 +140,10 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
           </Link>
         </h3>
 
-        <p className="text-2xl font-extrabold text-[var(--brand-primary-hover)]">
-          {formatCurrencyVnd(Number(listing.price))}
-          <span className="ml-2 text-sm font-medium text-slate-500">{formatAreaM2(Number(listing.area))}</span>
-          {pricePerM2 ? <span className="ml-2 text-sm font-semibold text-emerald-700">{pricePerM2}</span> : null}
+        <p className="flex min-w-0 items-baseline gap-1.5 whitespace-nowrap text-[clamp(1.28rem,2vw,1.5rem)] font-extrabold tracking-[-0.03em] text-[var(--brand-primary-hover)]">
+          <span className="shrink-0">{formatCurrencyVnd(Number(listing.price))}</span>
+          <span className="shrink-0 text-[0.72rem] font-medium tracking-normal text-slate-500 sm:text-xs">{formatAreaM2(Number(listing.area))}</span>
+          {pricePerM2 ? <span className="shrink-0 text-[0.72rem] font-semibold tracking-normal text-emerald-700 sm:text-xs">{pricePerM2}</span> : null}
         </p>
 
         <p className="line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-slate-600">{preview}</p>
