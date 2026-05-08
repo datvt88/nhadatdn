@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { Route } from 'next';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../lib/api';
 import { buildPagePath } from '../lib/pagination-seo';
 import { resolveDealType, type DealType } from '../lib/listing-route';
@@ -44,6 +44,12 @@ export function SearchListingFeed({
   const [items, setItems] = useState<ListingItem[]>(initialItems);
   const [nextCursor, setNextCursor] = useState<string | undefined>(initial.nextCursor);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setItems(initialItems);
+    setNextCursor(initial.nextCursor);
+    setLoading(false);
+  }, [initialItems, initial.nextCursor, initialPage]);
 
   const total = Math.max(Number(initial.total ?? 0), initialItems.length);
   const currentPage = Math.max(1, initialPage);
@@ -104,6 +110,7 @@ export function SearchListingFeed({
       {mode === 'page' && totalPages > 1 ? (
         <nav className="flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang danh mục">
           <Link
+            prefetch={false}
             className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
             href={buildPagePath(basePath ?? '', safeCurrentPage - 1, pageQuery) as Route}
             rel="prev"
@@ -120,6 +127,7 @@ export function SearchListingFeed({
               <span key={`page-${page}`} className="contents">
                 {gapBefore ? <span className="px-1 text-slate-400">…</span> : null}
                 <Link
+                  prefetch={false}
                   className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
                     page === safeCurrentPage
                       ? 'bg-[var(--brand-primary)] text-white'
@@ -137,6 +145,7 @@ export function SearchListingFeed({
             );
           })}
           <Link
+            prefetch={false}
             className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
             href={buildPagePath(basePath ?? '', safeCurrentPage + 1, pageQuery) as Route}
             rel="next"
