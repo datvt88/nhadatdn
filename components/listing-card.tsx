@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { Route } from 'next';
 import { useMemo, useState } from 'react';
 import type { ListingItem } from '../lib/types';
-import { formatAreaM2, formatCurrencyVnd, resolveListingImages } from '../lib/listing-presenter';
+import { formatAreaM2, formatCurrencyVnd, formatPricePerM2, resolveListingImages } from '../lib/listing-presenter';
 import { resolveDealType, buildListingPath } from '../lib/listing-route';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '../lib/listing-labels';
 
@@ -46,6 +46,7 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
   });
   const summary = (listing.description ?? '').replace(/\s+/g, ' ').trim();
   const preview = summary.length > 0 ? summary : 'Tin đăng nhà đất Đà Nẵng đang cập nhật mô tả chi tiết.';
+  const pricePerM2 = formatPricePerM2(Number(listing.price), Number(listing.area));
 
   const hasImage = mainImage.trim().length > 0;
   const badgeText = packageBadgeLabel(listing.packageType);
@@ -142,6 +143,7 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
         <p className="text-2xl font-extrabold text-[var(--brand-primary-hover)]">
           {formatCurrencyVnd(Number(listing.price))}
           <span className="ml-2 text-sm font-medium text-slate-500">{formatAreaM2(Number(listing.area))}</span>
+          {pricePerM2 ? <span className="ml-2 text-sm font-semibold text-emerald-700">{pricePerM2}</span> : null}
         </p>
 
         <p className="line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-slate-600">{preview}</p>

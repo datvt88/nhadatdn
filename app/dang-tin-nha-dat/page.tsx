@@ -81,9 +81,13 @@ function normalizeDecimalInput(raw: string): string {
   return `${cleaned.slice(0, lastDot).replace(/\./g, '')}${cleaned.slice(lastDot)}`;
 }
 
-function parsePositiveDecimal(raw: string): number | null {
+function parsePositiveDecimal(raw: string, maxFractionDigits?: number): number | null {
   const normalized = normalizeDecimalInput(raw);
   if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+  if (typeof maxFractionDigits === 'number' && maxFractionDigits >= 0) {
+    const fraction = normalized.split('.')[1] ?? '';
+    if (fraction.length > maxFractionDigits) return null;
+  }
   const value = Number(normalized);
   if (!Number.isFinite(value) || value <= 0) return null;
   return value;
@@ -256,7 +260,7 @@ export default function PostListingDanangPage() {
   const [formKey, setFormKey] = useState(0);
 
   const beanCost = useMemo(() => requiredBean(packageType), [packageType]);
-  const parsedPricePreview = useMemo(() => parsePositiveDecimal(priceInput), [priceInput]);
+  const parsedPricePreview = useMemo(() => parsePositiveDecimal(priceInput, 2), [priceInput]);
 
   useEffect(() => {
     setPosterName(user?.fullName ?? '');
@@ -567,7 +571,7 @@ export default function PostListingDanangPage() {
     const title = String(formData.get('title') ?? '').trim();
     const description = String(formData.get('description') ?? '');
     const area = parsePositiveDecimal(String(formData.get('area') ?? ''));
-    const price = parsePositiveDecimal(priceInput);
+    const price = parsePositiveDecimal(priceInput, 2);
     const bedrooms = parseNonNegativeInt(String(formData.get('bedrooms') ?? ''));
     const bathrooms = parseNonNegativeInt(String(formData.get('bathrooms') ?? ''));
     const floors = parseOptionalDecimal(String(formData.get('floors') ?? ''));
@@ -583,7 +587,7 @@ export default function PostListingDanangPage() {
     const nextErrors: FieldErrors = {};
     if (!title) nextErrors.title = 'Vui lòng nhập tiêu đề.';
     if (!description) nextErrors.description = 'Vui lòng nhập mô tả.';
-    if (price === null) nextErrors.price = 'Giá không hợp lệ. Ví dụ: 3.5 hoặc 3,5.';
+    if (price === null) nextErrors.price = 'Giá không hợp lệ. Nhập tối đa 2 số sau phẩy, ví dụ: 1.85 hoặc 2,82.';
     if (area === null) nextErrors.area = 'Diện tích không hợp lệ.';
     if (bedrooms === null) nextErrors.bedrooms = 'Số phòng ngủ không hợp lệ.';
     if (bathrooms === null) nextErrors.bathrooms = 'Số phòng toilet không hợp lệ.';
@@ -747,7 +751,7 @@ export default function PostListingDanangPage() {
                     <div className={`${fieldClass(fieldErrors, 'price', 'flex items-center gap-2 px-0 py-0')} overflow-hidden`}>
                       <input
                         name="price"
-                        placeholder="Giá (ví dụ: 3.5 hoặc 3,5)"
+                        placeholder="Giá (ví dụ: 1.85 hoặc 2,82)"
                         className="w-full border-0 bg-transparent px-3 py-2 outline-none"
                         value={priceInput}
                         onChange={(event) => {

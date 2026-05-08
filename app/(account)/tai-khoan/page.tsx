@@ -142,9 +142,13 @@ function normalizeDecimalInput(raw: string): string {
   return `${cleaned.slice(0, lastDot).replace(/\./g, '')}${cleaned.slice(lastDot)}`;
 }
 
-function parsePositiveDecimal(raw: string): number | null {
+function parsePositiveDecimal(raw: string, maxFractionDigits?: number): number | null {
   const normalized = normalizeDecimalInput(raw);
   if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+  if (typeof maxFractionDigits === 'number' && maxFractionDigits >= 0) {
+    const fraction = normalized.split('.')[1] ?? '';
+    if (fraction.length > maxFractionDigits) return null;
+  }
   const value = Number(normalized);
   if (!Number.isFinite(value) || value <= 0) return null;
   return value;
@@ -737,7 +741,7 @@ export default function AccountHomePage() {
     const activeUser = await ensureActiveSession(user, 'edit');
     if (!activeUser) return;
 
-    const price = parsePositiveDecimal(editingDraft.price);
+    const price = parsePositiveDecimal(editingDraft.price, 2);
     const area = parsePositiveDecimal(editingDraft.area);
     const bedrooms = parseNonNegativeInt(editingDraft.bedrooms);
     const bathrooms = parseNonNegativeInt(editingDraft.bathrooms);
@@ -757,7 +761,7 @@ export default function AccountHomePage() {
       return;
     }
     if (price === null || area === null || bedrooms === null || bathrooms === null) {
-      setMessage('Giá, diện tích, phòng ngủ hoặc phòng tắm chưa hợp lệ.');
+      setMessage('Giá tối đa 2 số sau phẩy; diện tích, phòng ngủ hoặc phòng tắm chưa hợp lệ.');
       return;
     }
     if (!districtValue || !wardValue) {

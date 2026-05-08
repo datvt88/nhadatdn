@@ -80,6 +80,17 @@ export function formatCurrencyVnd(value: number): string {
   return `${Math.round(value).toLocaleString('vi-VN')} đ`;
 }
 
+export function formatPricePerM2(price: number, area: number): string {
+  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(area) || area <= 0) {
+    return '';
+  }
+
+  const priceInVnd = price <= 10_000 ? price * 1_000_000_000 : price;
+  const millionPerM2 = priceInVnd / area / 1_000_000;
+  if (!Number.isFinite(millionPerM2) || millionPerM2 <= 0) return '';
+  return `~ ${formatDecimal(millionPerM2)} tr/m²`;
+}
+
 export function formatAreaM2(value: number): string {
   return `${value} m²`;
 }
