@@ -1,7 +1,5 @@
-'use client';
+﻿'use client';
 
-import Link from 'next/link';
-import type { Route } from 'next';
 import { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../lib/api';
 import { buildPagePath } from '../lib/pagination-seo';
@@ -66,10 +64,10 @@ export function SearchListingFeed({
 
   const summary = useMemo(() => {
     const shown = items.length;
-    if (shown <= 0) return 'Không có kết quả';
-    if (mode === 'page') return `Hiển thị ${startItem}-${endItem} / ${total} tin`;
-    if (hasDealTypeFilter) return `Đang hiển thị ${shown} tin`;
-    return `Đang hiển thị ${shown}/${total} tin`;
+    if (shown <= 0) return 'KhÃ´ng cÃ³ káº¿t quáº£';
+    if (mode === 'page') return `Hiá»ƒn thá»‹ ${startItem}-${endItem} / ${total} tin`;
+    if (hasDealTypeFilter) return `Äang hiá»ƒn thá»‹ ${shown} tin`;
+    return `Äang hiá»ƒn thá»‹ ${shown}/${total} tin`;
   }, [endItem, hasDealTypeFilter, items.length, mode, startItem, total]);
 
   async function loadMore() {
@@ -108,53 +106,53 @@ export function SearchListingFeed({
       <ListingGrid listings={items} />
 
       {mode === 'page' && totalPages > 1 ? (
-        <nav className="flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang danh mục">
-          <Link
-            prefetch={false}
+        <nav className="flex flex-wrap items-center justify-center gap-2" aria-label="PhÃ¢n trang danh má»¥c">
+          <a
+           
             className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
-            href={buildPagePath(basePath ?? '', safeCurrentPage - 1, pageQuery) as Route}
+            href={buildPagePath(basePath ?? '', safeCurrentPage - 1, pageQuery)}
             rel="prev"
             aria-disabled={safeCurrentPage <= 1}
             tabIndex={safeCurrentPage <= 1 ? -1 : undefined}
             style={safeCurrentPage <= 1 ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
           >
-            Trước
-          </Link>
+            TrÆ°á»›c
+          </a>
           {pageWindow.map((page, index) => {
             const previous = pageWindow[index - 1];
             const gapBefore = typeof previous === 'number' && page - previous > 1;
             return (
               <span key={`page-${page}`} className="contents">
-                {gapBefore ? <span className="px-1 text-slate-400">…</span> : null}
-                <Link
-                  prefetch={false}
+                {gapBefore ? <span className="px-1 text-slate-400">â€¦</span> : null}
+                <a
+                 
                   className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
                     page === safeCurrentPage
                       ? 'bg-[var(--brand-primary)] text-white'
                       : 'border border-slate-200 bg-white text-slate-700 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]'
                   }`}
-                  href={buildPagePath(basePath ?? '', page, pageQuery) as Route}
+                  href={buildPagePath(basePath ?? '', page, pageQuery)}
                   aria-current={page === safeCurrentPage ? 'page' : undefined}
                   aria-disabled={page === safeCurrentPage}
                   tabIndex={page === safeCurrentPage ? -1 : undefined}
                   style={page === safeCurrentPage ? { pointerEvents: 'none' } : undefined}
                 >
                   {page}
-                </Link>
+                </a>
               </span>
             );
           })}
-          <Link
-            prefetch={false}
+          <a
+           
             className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
-            href={buildPagePath(basePath ?? '', safeCurrentPage + 1, pageQuery) as Route}
+            href={buildPagePath(basePath ?? '', safeCurrentPage + 1, pageQuery)}
             rel="next"
             aria-disabled={safeCurrentPage >= totalPages}
             tabIndex={safeCurrentPage >= totalPages ? -1 : undefined}
             style={safeCurrentPage >= totalPages ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
           >
             Sau
-          </Link>
+          </a>
         </nav>
       ) : null}
 
@@ -166,10 +164,11 @@ export function SearchListingFeed({
             disabled={loading}
             className="rounded-full bg-[var(--brand-primary)] px-6 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {loading ? 'Đang tải...' : 'Xem thêm'}
+            {loading ? 'Äang táº£i...' : 'Xem thÃªm'}
           </button>
         </div>
       ) : null}
     </div>
   );
 }
+

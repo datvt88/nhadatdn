@@ -1,6 +1,4 @@
-import Link from 'next/link';
-import type { Route } from 'next';
-import type { ListingItem } from '../lib/types';
+﻿import type { ListingItem } from '../lib/types';
 import { ListingCard } from './listing-card';
 
 function sectionTitle(id: string, label: string) {
@@ -36,7 +34,7 @@ export function ListingShowcase({
   if (listings.length === 0) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
-        Chưa có tin đăng phù hợp bộ lọc. Vui lòng thử điều kiện khác.
+        ChÆ°a cÃ³ tin Ä‘Äƒng phÃ¹ há»£p bá»™ lá»c. Vui lÃ²ng thá»­ Ä‘iá»u kiá»‡n khÃ¡c.
       </section>
     );
   }
@@ -53,17 +51,17 @@ export function ListingShowcase({
   return (
     <div className="space-y-6">
       <section>
-        {sectionTitle('homepage-latest', 'Bất động sản nổi bật mới nhất')}
+        {sectionTitle('homepage-latest', 'Báº¥t Ä‘á»™ng sáº£n ná»•i báº­t má»›i nháº¥t')}
         <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <p>
-            Hiển thị <span className="font-semibold text-slate-900">{startItem}</span>
+            Hiá»ƒn thá»‹ <span className="font-semibold text-slate-900">{startItem}</span>
             {' - '}
             <span className="font-semibold text-slate-900">{endItem}</span>
             {' / '}
             <span className="font-semibold text-slate-900">{total}</span> tin
           </p>
           <p className="text-xs text-slate-500 sm:text-sm">
-            {loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}
+            {loading ? 'Äang cáº­p nháº­t káº¿t quáº£...' : `Trang ${safeCurrentPage}/${totalPages}`}
           </p>
         </div>
 
@@ -74,19 +72,19 @@ export function ListingShowcase({
         </div>
 
         {totalPages > 1 ? (
-          <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang trang chủ">
+          <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="PhÃ¢n trang trang chá»§">
             {useLinkPagination && buildPageHref ? (
-              <Link
-                prefetch={false}
+              <a
+               
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
-                href={buildPageHref(safeCurrentPage - 1) as Route}
+                href={buildPageHref(safeCurrentPage - 1)}
                 rel="prev"
                 aria-disabled={safeCurrentPage <= 1}
                 tabIndex={safeCurrentPage <= 1 ? -1 : undefined}
                 style={safeCurrentPage <= 1 ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
               >
-                Trước
-              </Link>
+                TrÆ°á»›c
+              </a>
             ) : (
               <button
                 type="button"
@@ -94,7 +92,7 @@ export function ListingShowcase({
                 onClick={() => onPageChange?.(safeCurrentPage - 1)}
                 disabled={safeCurrentPage <= 1 || loading}
               >
-                Trước
+                TrÆ°á»›c
               </button>
             )}
             {pages.map((page, index) => {
@@ -102,23 +100,23 @@ export function ListingShowcase({
               const gapBefore = typeof prev === 'number' && page - prev > 1;
               return (
                 <span key={`page-${page}`} className="contents">
-                  {gapBefore ? <span className="px-1 text-slate-400">…</span> : null}
+                  {gapBefore ? <span className="px-1 text-slate-400">â€¦</span> : null}
                   {useLinkPagination && buildPageHref ? (
-                    <Link
-                      prefetch={false}
+                    <a
+                     
                       className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
                         page === safeCurrentPage
                           ? 'bg-[var(--brand-primary)] text-white'
                           : 'border border-slate-200 bg-white text-slate-700 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]'
                       }`}
-                      href={buildPageHref(page) as Route}
+                      href={buildPageHref(page)}
                       aria-current={page === safeCurrentPage ? 'page' : undefined}
                       aria-disabled={page === safeCurrentPage}
                       tabIndex={page === safeCurrentPage ? -1 : undefined}
                       style={page === safeCurrentPage ? { pointerEvents: 'none' } : undefined}
                     >
                       {page}
-                    </Link>
+                    </a>
                   ) : (
                     <button
                       type="button"
@@ -138,17 +136,17 @@ export function ListingShowcase({
               );
             })}
             {useLinkPagination && buildPageHref ? (
-              <Link
-                prefetch={false}
+              <a
+               
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
-                href={buildPageHref(safeCurrentPage + 1) as Route}
+                href={buildPageHref(safeCurrentPage + 1)}
                 rel="next"
                 aria-disabled={safeCurrentPage >= totalPages}
                 tabIndex={safeCurrentPage >= totalPages ? -1 : undefined}
                 style={safeCurrentPage >= totalPages ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
               >
                 Sau
-              </Link>
+              </a>
             ) : (
               <button
                 type="button"
@@ -165,3 +163,4 @@ export function ListingShowcase({
     </div>
   );
 }
+
