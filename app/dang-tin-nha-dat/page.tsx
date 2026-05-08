@@ -131,6 +131,45 @@ function normalizeCityLabel(raw?: string): string {
   return LOCATION_NAME_VI_MAP[cleaned] ?? cleaned;
 }
 
+function normalizeLocationKey(raw: string): string {
+  return normalizeLocationLabel(raw)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(phuong|xa|quan|huyen|thanh pho|tp)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function inferLocationFromAddress(catalog: DanangCatalog, districtId: string, wardId: string, address: string): { district: DistrictItem | null; ward: WardItem | null } {
+  const currentDistrict = catalog.districts.find((item) => item.id === Number(districtId)) ?? null;
+  const currentWard = currentDistrict?.wards.find((item) => item.id === Number(wardId)) ?? null;
+  const addressKey = normalizeLocationKey(address);
+
+  if (addressKey) {
+    const candidates = catalog.districts
+      .flatMap((district) => district.wards.map((ward) => ({ district, ward, key: normalizeLocationKey(ward.name) })))
+      .filter((item) => item.key.length > 0)
+      .sort((a, b) => b.key.length - a.key.length);
+    const matchedWard = candidates.find((item) => addressKey.includes(item.key));
+    if (matchedWard) return { district: matchedWard.district, ward: matchedWard.ward };
+
+    const matchedDistrict = [...catalog.districts]
+      .map((district) => ({ district, key: normalizeLocationKey(district.name) }))
+      .filter((item) => item.key.length > 0)
+      .sort((a, b) => b.key.length - a.key.length)
+      .find((item) => addressKey.includes(item.key));
+    if (matchedDistrict) {
+      return { district: matchedDistrict.district, ward: matchedDistrict.district.wards[0] ?? null };
+    }
+  }
+
+  if (currentDistrict && currentWard) return { district: currentDistrict, ward: currentWard };
+  const firstDistrict = catalog.districts[0] ?? null;
+  return { district: firstDistrict, ward: firstDistrict?.wards[0] ?? null };
+}
+
 
 function fieldClass(errors: FieldErrors, key: FieldKey, extra = ''): string {
   const base = 'rounded border px-3 py-2';
@@ -151,6 +190,18 @@ async function fetchApiWithFallback(path: string, init?: RequestInit): Promise<R
   }
 
   return fetch(`/api${path}`, init);
+}
+
+async function fetchDanangCatalog(): Promise<DanangCatalog | null> {
+  try {
+    const res = await fetchApiWithFallback('/locations/danang', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = (await res.json()) as DanangCatalog;
+    if (!Array.isArray(data.districts) || data.districts.length === 0) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 function buildUploadApiCandidates(path: string): string[] {
@@ -310,10 +361,12 @@ export default function PostListingDanangPage() {
   useEffect(() => {
     let active = true;
     const loadCatalog = async () => {
-      const res = await fetch(`${API_BASE}/locations/danang`, { cache: 'no-store' });
-      if (!res.ok) return;
-      const data = (await res.json()) as DanangCatalog;
+      const data = await fetchDanangCatalog();
       if (!active) return;
+      if (!data) {
+        setStatus((prev) => prev ?? { tone: 'error', message: 'Không tải được danh mục phường/xã. Hệ thống sẽ thử tải lại khi đăng tin.' });
+        return;
+      }
       setCatalog(data);
       if (Array.isArray(data.districts) && data.districts.length > 0) {
         const firstDistrict = data.districts[0];
@@ -562,8 +615,16 @@ export default function PostListingDanangPage() {
     if (!activeUser) {
       return;
     }
-    if (!catalog) {
-      setStatus({ tone: 'error', message: 'Danh mục phường/xã chưa tải xong.' });
+    let activeCatalog = catalog;
+    if (!activeCatalog) {
+      setStatus({ tone: 'info', message: 'Đang tải lại danh mục phường/xã Đà Nẵng...' });
+      activeCatalog = await fetchDanangCatalog();
+      if (activeCatalog) {
+        setCatalog(activeCatalog);
+      }
+    }
+    if (!activeCatalog) {
+      setStatus({ tone: 'error', message: 'Không tải được danh mục phường/xã. Vui lòng kiểm tra kết nối backend và thử lại.' });
       return;
     }
 
@@ -579,9 +640,10 @@ export default function PostListingDanangPage() {
     const finalAddress = address.trim();
     const contactPhoneNormalized = normalizePhone(contactPhone);
 
-    const cityId = Number(catalog.cityId);
-    const districtValue = Number(districtId);
-    const wardValue = Number(wardId);
+    const inferredLocation = inferLocationFromAddress(activeCatalog, districtId, wardId, finalAddress);
+    const cityId = Number(activeCatalog.cityId);
+    const districtValue = Number(inferredLocation.district?.id ?? 0);
+    const wardValue = Number(inferredLocation.ward?.id ?? 0);
 
     const nextErrors: FieldErrors = {};
     if (!title) nextErrors.title = 'Vui lòng nhập tiêu đề.';
@@ -601,6 +663,9 @@ export default function PostListingDanangPage() {
       setStatus({ tone: 'error', message: 'Vui lòng kiểm tra các ô màu đỏ và thử lại.' });
       return;
     }
+
+    setDistrictId(String(districtValue));
+    setWardId(String(wardValue));
 
     const payload = {
       userId: activeUser.id,
@@ -657,8 +722,8 @@ export default function PostListingDanangPage() {
       ? buildListingPath({
           slug: listingSlug,
           categoryHint: dealType,
-          ...(selectedDistrict?.name ? { district: selectedDistrict.name } : {}),
-          ...(selectedWard?.name ? { ward: selectedWard.name } : {}),
+          ...(inferredLocation.district?.name ? { district: inferredLocation.district.name } : {}),
+          ...(inferredLocation.ward?.name ? { ward: inferredLocation.ward.name } : {}),
         })
       : '/';
 
@@ -836,6 +901,7 @@ export default function PostListingDanangPage() {
                     onChange={(event) => {
                       setAddress(event.target.value);
                       clearFieldError('address');
+                      clearFieldError('districtId');
                     }}
                     onBlur={() => {
                       window.setTimeout(() => setAddressSuggestions([]), 120);
@@ -855,8 +921,14 @@ export default function PostListingDanangPage() {
                             className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
                             onClick={() => {
                               setAddress(item.label);
+                              if (catalog) {
+                                const inferred = inferLocationFromAddress(catalog, districtId, wardId, item.label);
+                                if (inferred.district) setDistrictId(String(inferred.district.id));
+                                if (inferred.ward) setWardId(String(inferred.ward.id));
+                              }
                               setAddressSuggestions([]);
                               clearFieldError('address');
+                              clearFieldError('districtId');
                             }}
                           >
                             {item.label}
