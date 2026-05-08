@@ -7,7 +7,7 @@ import { ListingImageGallery } from '@/components/listing-image-gallery';
 import { SellerRatingPanel } from '@/components/seller-rating-panel';
 import { fetchJsonOr } from '@/lib/api';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '@/lib/listing-labels';
-import { formatAreaM2, formatCurrencyVnd } from '@/lib/listing-presenter';
+import { formatAreaM2, formatCurrencyVnd, formatPricePerM2 } from '@/lib/listing-presenter';
 import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '@/lib/listing-route';
 import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '@/lib/seo';
 import type { ListingItem } from '@/lib/types';
@@ -20,7 +20,7 @@ type ListingDetail = Omit<ListingItem, 'city' | 'district'> & {
   images?: ListingImage[];
   city?: string | { name?: string };
   district?: string | { name?: string };
-  ward?: { name?: string };
+  ward?: string | { name?: string };
   propertyType?: string;
   dealType?: string;
   DealType?: string;
@@ -40,15 +40,51 @@ type ListingDetail = Omit<ListingItem, 'city' | 'district'> & {
   };
 };
 
+function compactLocationPart(value: unknown): string {
+  if (typeof value === 'string') return value.replace(/\s+/g, ' ').trim();
+  if (value && typeof value === 'object' && 'name' in value) {
+    return String((value as { name?: unknown }).name ?? '').replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
+function normalizeDanangCity(value: string): string {
+  const normalized = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  if (!normalized || normalized === 'da nang' || normalized === 'tp da nang' || normalized === 'thanh pho da nang') {
+    return 'TP Đà Nẵng';
+  }
+  return value;
+}
+
+function appendUniqueLocation(parts: string[], value: string): void {
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return;
+  const normalized = cleaned
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (parts.some((part) => normalized.includes(part.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()))) {
+    return;
+  }
+  parts.push(cleaned);
+}
+
 function toLocation(detail: ListingDetail): string {
-  const ward = detail.ward?.name;
-  const district = typeof detail.district === 'string' ? detail.district : detail.district?.name;
-  const city = typeof detail.city === 'string' ? detail.city : detail.city?.name;
-  return [ward, district, city].filter(Boolean).join(', ') || detail.address || 'Đang cập nhật địa chỉ';
+  const parts: string[] = [];
+  appendUniqueLocation(parts, compactLocationPart(detail.address));
+  appendUniqueLocation(parts, compactLocationPart(detail.ward));
+  appendUniqueLocation(parts, compactLocationPart(detail.district));
+  appendUniqueLocation(parts, normalizeDanangCity(compactLocationPart(detail.city)));
+  return parts.join(', ') || 'Đang cập nhật địa chỉ';
 }
 
 function districtName(detail: ListingDetail): string {
-  return typeof detail.district === 'string' ? detail.district : detail.district?.name ?? 'Đà Nẵng';
+  return compactLocationPart(detail.district) || 'Đà Nẵng';
 }
 
 function hasCoordinates(detail: ListingDetail): boolean {
@@ -62,7 +98,7 @@ function buildMapQuery(detail: ListingDetail): string {
     return `${Number(detail.lat)},${Number(detail.lng)}`;
   }
 
-  const text = [detail.address, detail.ward?.name, districtName(detail), 'Đà Nẵng']
+  const text = [detail.address, compactLocationPart(detail.ward), districtName(detail), 'Đà Nẵng']
     .map((part) => String(part ?? '').trim())
     .filter(Boolean)
     .join(', ');
@@ -152,7 +188,7 @@ export async function generateMetadata({ params }: { params: { dealType: string;
   const images = resolveImages(listing);
   const primaryImage = images[0];
   const description = buildSeoDescription(listing);
-  const wardName = listing.ward?.name;
+  const wardName = compactLocationPart(listing.ward);
   const dealTypeHint = (listing.dealType ?? listing.DealType ?? '').toString();
   const canonicalDealType = resolveDealType(listing.title, dealTypeHint);
   const seoCategoryLabel = canonicalDealType === 'cho-thue' ? 'Cho thuê nhà đất Đà Nẵng' : 'Mua bán nhà đất Đà Nẵng';
@@ -201,7 +237,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
     );
   }
 
-  const wardName = listing.ward?.name;
+  const wardName = compactLocationPart(listing.ward);
   const dealTypeHint = (listing.dealType ?? listing.DealType ?? '').toString();
   const path = buildListingPath({ slug: listing.slug, title: listing.title, district: districtName(listing), ...(wardName ? { ward: wardName } : {}), ...(dealTypeHint ? { categoryHint: dealTypeHint } : {}) });
   const expected = `/${params.dealType}/${params.location}/${params.slug}`;
@@ -226,6 +262,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const completedLabel = canonicalDealType === 'cho-thue' ? 'Đã cho thuê' : 'Đã bán';
   const packageBadgeText = packageBadgeLabel(listing.packageType);
   const showVipBadge = packageBadgeText !== '';
+  const pricePerM2 = formatPricePerM2(Number(listing.price), Number(listing.area));
   const categoryLabel = canonicalDealType === 'cho-thue' ? 'Cho thuê nhà đất' : 'Mua bán nhà đất';
   const locationLabel = districtName(listing);
   const siteUrl = getSiteUrl();
@@ -282,7 +319,11 @@ export default async function ListingDetailPage({ params }: { params: { dealType
                 <ListingDetailActions slug={listing.slug} title={listing.title} path={path} price={Number(listing.price)} area={Number(listing.area)} address={toLocation(listing)} {...(gallery[0] ? { image: gallery[0] } : {})} />
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-3xl font-extrabold text-[var(--brand-primary-hover)]">{formatCurrencyVnd(Number(listing.price))}</span>
+                <p className="flex min-w-0 items-baseline gap-2 whitespace-nowrap text-[var(--brand-primary-hover)]">
+                  <span className="text-3xl font-extrabold">{formatCurrencyVnd(Number(listing.price))}</span>
+                  <span className="text-sm font-medium text-slate-500">{formatAreaM2(Number(listing.area))}</span>
+                  {pricePerM2 ? <span className="text-sm font-semibold text-emerald-700">{pricePerM2}</span> : null}
+                </p>
                 {showVipBadge ? <span className={packageBadgeClassName(listing.packageType)}>{packageBadgeText}</span> : null}
                 <span className="rounded bg-cyan-100 px-2 py-1 text-xs font-semibold text-[var(--brand-primary-hover)]">{listingStatusLabel(listing.status, dealType)}</span>
               </div>
