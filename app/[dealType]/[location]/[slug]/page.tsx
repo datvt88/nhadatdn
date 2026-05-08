@@ -7,7 +7,7 @@ import { ListingImageGallery } from '@/components/listing-image-gallery';
 import { SellerRatingPanel } from '@/components/seller-rating-panel';
 import { fetchJsonOr } from '@/lib/api';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '@/lib/listing-labels';
-import { formatAreaM2, formatCurrencyVnd, formatPricePerM2 } from '@/lib/listing-presenter';
+import { formatAreaM2, formatListingPrice, formatPricePerM2 } from '@/lib/listing-presenter';
 import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '@/lib/listing-route';
 import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '@/lib/seo';
 import type { ListingItem } from '@/lib/types';
@@ -137,7 +137,8 @@ function resolveImages(detail: ListingDetail): string[] {
 function buildSeoDescription(detail: ListingDetail): string {
   const location = toLocation(detail);
   const summary = (detail.description ?? '').replace(/\s+/g, ' ').trim();
-  const prefix = `${detail.title}. Giá ${formatCurrencyVnd(Number(detail.price))}, diện tích ${formatAreaM2(Number(detail.area))}, ${location}.`;
+  const detailDealType = resolveDealType(detail.title, (detail.dealType ?? detail.DealType ?? '').toString());
+  const prefix = `${detail.title}. Giá ${formatListingPrice(Number(detail.price), detailDealType)}, diện tích ${formatAreaM2(Number(detail.area))}, ${location}.`;
   return normalizeSeoText(`${prefix} ${summary}`).slice(0, 300);
 }
 
@@ -275,7 +276,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const completedLabel = canonicalDealType === 'cho-thue' ? 'Đã cho thuê' : 'Đã bán';
   const packageBadgeText = packageBadgeLabel(listing.packageType);
   const showVipBadge = packageBadgeText !== '';
-  const pricePerM2 = formatPricePerM2(Number(listing.price), Number(listing.area));
+  const pricePerM2 = canonicalDealType === 'cho-thue' ? '' : formatPricePerM2(Number(listing.price), Number(listing.area));
   const categoryLabel = canonicalDealType === 'cho-thue' ? 'Cho thuê nhà đất' : 'Mua bán nhà đất';
   const locationLabel = districtName(listing);
   const siteUrl = getSiteUrl();
@@ -333,7 +334,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="flex min-w-0 items-baseline gap-2 whitespace-nowrap text-[var(--brand-primary-hover)]">
-                  <span className="text-3xl font-extrabold">{formatCurrencyVnd(Number(listing.price))}</span>
+                  <span className="text-3xl font-extrabold">{formatListingPrice(Number(listing.price), canonicalDealType)}</span>
                   <span className="text-sm font-medium text-slate-500">{formatAreaM2(Number(listing.area))}</span>
                   {pricePerM2 ? <span className="text-sm font-semibold text-emerald-700">{pricePerM2}</span> : null}
                 </p>

@@ -8,6 +8,7 @@ import { HeaderNav } from '../../components/header-nav';
 import { API_BASE } from '../../lib/api';
 import { authHeaders, readAuthUser, writeAuthUser, type AuthUser } from '../../lib/auth-session';
 import { buildListingPath } from '../../lib/listing-route';
+import { formatListingPrice } from '../../lib/listing-presenter';
 
 type LoginPayload = { user: AuthUser; sessionToken?: string };
 type PostResult = { id: number; slug: string; beanCost: number; beanBalance: number };
@@ -70,6 +71,7 @@ function normalizeDecimalInput(raw: string): string {
   const cleaned = raw
     .trim()
     .toLowerCase()
+    .replace(/tr\/tháng|tr\/thang|triệu\/tháng|trieu\/thang/g, '')
     .replace(/tỷ|ty/g, '')
     .replace(/\s+/g, '')
     .replace(/,/g, '.');
@@ -208,10 +210,6 @@ async function uploadImagesWithFallback(
   throw new Error('upload request failed');
 }
 
-function formatTyValue(value: number): string {
-  return `${value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d*[1-9])0$/, '$1')} Tỷ`;
-}
-
 function mapServerErrorToField(message: string): FieldErrors {
   const lower = message.toLowerCase();
   const errors: FieldErrors = {};
@@ -261,6 +259,7 @@ export default function PostListingDanangPage() {
 
   const beanCost = useMemo(() => requiredBean(packageType), [packageType]);
   const parsedPricePreview = useMemo(() => parsePositiveDecimal(priceInput, 2), [priceInput]);
+  const priceUnitLabel = dealType === 'cho-thue' ? 'tr/tháng' : 'Tỷ';
 
   useEffect(() => {
     setPosterName(user?.fullName ?? '');
@@ -751,7 +750,7 @@ export default function PostListingDanangPage() {
                     <div className={`${fieldClass(fieldErrors, 'price', 'flex items-center gap-2 px-0 py-0')} overflow-hidden`}>
                       <input
                         name="price"
-                        placeholder="Giá (ví dụ: 1.85 hoặc 2,82)"
+                        placeholder={dealType === 'cho-thue' ? 'Giá thuê (ví dụ: 15.5)' : 'Giá bán (ví dụ: 1.85 hoặc 2,82)'}
                         className="w-full border-0 bg-transparent px-3 py-2 outline-none"
                         value={priceInput}
                         onChange={(event) => {
@@ -759,7 +758,7 @@ export default function PostListingDanangPage() {
                           clearFieldError('price');
                         }}
                       />
-                      <span className="pr-3 text-sm font-semibold text-slate-600">Tỷ</span>
+                      <span className="whitespace-nowrap pr-3 text-sm font-semibold text-slate-600">{priceUnitLabel}</span>
                     </div>
                     {fieldErrors.price ? <p className="text-xs text-red-600">{fieldErrors.price}</p> : null}
                   </div>
@@ -955,7 +954,7 @@ export default function PostListingDanangPage() {
 
                 <p className="text-sm text-slate-600">
                   Gói hiện tại sẽ trừ <span className="font-semibold">{beanCost} Bean</span>.
-                  {priceInput.trim() ? <span className="ml-2 text-slate-700">Giá sẽ hiển thị: <span className="font-semibold">{parsedPricePreview !== null ? formatTyValue(parsedPricePreview) : "Giá chưa hợp lệ"}</span></span> : null}
+                  {priceInput.trim() ? <span className="ml-2 text-slate-700">Giá sẽ hiển thị: <span className="font-semibold">{parsedPricePreview !== null ? formatListingPrice(parsedPricePreview, dealType) : "Giá chưa hợp lệ"}</span></span> : null}
                 </p>
               </form>
             )}

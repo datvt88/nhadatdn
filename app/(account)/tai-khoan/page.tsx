@@ -133,6 +133,7 @@ function normalizeDecimalInput(raw: string): string {
   const cleaned = String(raw ?? '')
     .trim()
     .toLowerCase()
+    .replace(/tr\/tháng|tr\/thang|triệu\/tháng|trieu\/thang/g, '')
     .replace(/tỷ|ty/g, '')
     .replace(/\s+/g, '')
     .replace(/,/g, '.');
@@ -1161,7 +1162,10 @@ export default function AccountHomePage() {
                   ))}
                 </select>
                 <textarea className="min-h-28 rounded border border-slate-300 px-3 py-2 sm:col-span-2" value={editingDraft.description} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, description: e.target.value } : prev))} placeholder="Mô tả" />
-                <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.price} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, price: e.target.value } : prev))} placeholder="Giá (Tỷ)" />
+                <div className="flex overflow-hidden rounded border border-slate-300">
+                  <input className="min-w-0 flex-1 px-3 py-2 outline-none" value={editingDraft.price} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, price: e.target.value } : prev))} placeholder={editingDraft.dealType === 'cho-thue' ? 'Giá thuê' : 'Giá bán'} />
+                  <span className="flex items-center whitespace-nowrap px-3 text-sm font-semibold text-slate-600">{editingDraft.dealType === 'cho-thue' ? 'tr/tháng' : 'Tỷ'}</span>
+                </div>
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.area} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, area: e.target.value } : prev))} placeholder="Diện tích m2" />
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bedrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bedrooms: e.target.value } : prev))} placeholder="Số phòng ngủ" />
                 <input className="rounded border border-slate-300 px-3 py-2" value={editingDraft.bathrooms} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, bathrooms: e.target.value } : prev))} placeholder="Số phòng toilet" />

@@ -80,6 +80,16 @@ export function formatCurrencyVnd(value: number): string {
   return `${Math.round(value).toLocaleString('vi-VN')} đ`;
 }
 
+export function formatListingPrice(value: number, dealType?: string): string {
+  const normalizedDealType = String(dealType ?? '').trim().toLowerCase();
+  if (normalizedDealType === 'cho-thue') {
+    if (!Number.isFinite(value) || value <= 0) return '0 tr/tháng';
+    return `${formatDecimal(value)} tr/tháng`;
+  }
+
+  return formatCurrencyVnd(value);
+}
+
 export function formatPricePerM2(price: number, area: number): string {
   if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(area) || area <= 0) {
     return '';
