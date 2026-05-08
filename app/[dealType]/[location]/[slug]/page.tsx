@@ -61,14 +61,27 @@ function normalizeDanangCity(value: string): string {
   return value;
 }
 
+function normalizeLocationForCompare(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(thanh pho|tp|phuong|xa|quan|huyen)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function appendUniqueLocation(parts: string[], value: string): void {
   const cleaned = value.replace(/\s+/g, ' ').trim();
   if (!cleaned) return;
-  const normalized = cleaned
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-  if (parts.some((part) => normalized.includes(part.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()))) {
+  const normalized = normalizeLocationForCompare(cleaned);
+  if (
+    parts.some((part) => {
+      const existing = normalizeLocationForCompare(part);
+      return existing.includes(normalized) || normalized.includes(existing);
+    })
+  ) {
     return;
   }
   parts.push(cleaned);
