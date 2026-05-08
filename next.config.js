@@ -30,6 +30,8 @@ const cspConnectSrcAllowlist = new Set([
   'https://oauth2.googleapis.com',
   'https://www.googleapis.com',
   'https://www.google-analytics.com',
+  'https://www.google.com',
+  'https://googleads.g.doubleclick.net',
   'https://region1.google-analytics.com',
   'https://stats.g.doubleclick.net',
 ]);
