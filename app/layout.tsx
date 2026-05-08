@@ -79,7 +79,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 __html: `window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', ${JSON.stringify(googleTagId)});`,
+gtag('set', 'allow_ad_personalization_signals', false);
+gtag('config', ${JSON.stringify(googleTagId)}, {
+  allow_ad_personalization_signals: false,
+  allow_google_signals: false
+});`,
               }}
             />
           </>
