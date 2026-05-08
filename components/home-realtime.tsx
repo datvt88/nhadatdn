@@ -279,6 +279,9 @@ export function HomeRealtime({
     [areaMax, areaMin, district, keyword, priceMax, priceMin, propertyType],
   );
   const districtSlug = useMemo(() => resolveDistrictSlug(district, districts), [district, districts]);
+  const showcaseListings = hasActiveFilters ? listings : initialListings;
+  const showcaseTotal = hasActiveFilters ? total : initialTotal;
+  const showcaseCurrentPage = hasActiveFilters ? currentPage : initialPage;
 
   const keywordSuggestions = useMemo(() => {
     return dedupeSuggestions([
@@ -632,9 +635,10 @@ export function HomeRealtime({
 
       <section className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <ListingShowcase
-          listings={listings}
-          total={total}
-          currentPage={currentPage}
+          key={hasActiveFilters ? 'filtered-homepage-results' : `homepage-page-${initialPage}`}
+          listings={showcaseListings}
+          total={showcaseTotal}
+          currentPage={showcaseCurrentPage}
           pageSize={PAGE_SIZE}
           loading={loading}
           onPageChange={onPageChange}
