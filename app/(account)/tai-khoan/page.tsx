@@ -59,8 +59,7 @@ const HOUSE_DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Tây Bắc', 'Đôn
 const PROPERTY_TYPES = ['Nhà mặt tiền', 'Nhà kiệt, hẻm', 'Biệt thự, nhà liền kề', 'Căn hộ chung cư', 'Nhà trọ, phòng trọ', 'Cửa hàng, kho, xưởng', 'Nhà hàng, khách sạn', 'Đất thổ cư', 'Đất nền, đất dự án', 'Đất nông nghiệp', 'Trang trại, khu sinh thái', 'Các loại khác'] as const;
 
 const packageGuide = [
-  { packageType: 'FREE', beanCost: 0, note: 'Tin thường miễn phí, trừ 1 lượt FREE trong quota tài khoản' },
-  { packageType: 'NORMAL', beanCost: 5, note: 'Tin thường trả phí, trừ 5 Bean/tin' },
+  { packageType: 'NORMAL', beanCost: 5, note: 'Tin thường, trừ 5 Bean/tin' },
   { packageType: 'VIP', beanCost: 50, note: 'Tin VIP ưu tiên hiển thị, trừ 50 Bean/tin' },
 ] as const;
 
@@ -216,6 +215,7 @@ async function uploadImagesWithFallback(path: string, form: FormData, headers: R
 export default function AccountHomePage() {
   const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
+  const [showSignupBeanWelcome, setShowSignupBeanWelcome] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [myListings, setMyListings] = useState<MyListingItem[]>([]);
   const [statusById, setStatusById] = useState<Record<number, string>>({});
@@ -339,6 +339,11 @@ export default function AccountHomePage() {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setShowSignupBeanWelcome(new URLSearchParams(window.location.search).get('welcome') === 'bean');
   }, []);
 
   const selectedEditDistrict = useMemo(() => {
@@ -875,6 +880,30 @@ export default function AccountHomePage() {
         <h1 className="text-2xl font-semibold text-slate-900">Hồ sơ người dùng</h1>
         <p className="mt-2 text-slate-600">Quản lý thông tin tài khoản, Bean và toàn bộ tin bạn đã đăng.</p>
 
+        {showSignupBeanWelcome ? (
+          <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm">
+            <p className="text-base font-semibold">Chào mừng tài khoản mới.</p>
+            <p className="mt-1 text-sm">
+              Bạn được tặng 100 Bean để sử dụng đăng tin miễn phí: có thể đăng 20 tin thường hoặc 2 tin VIP.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link href="/dang-tin-nha-dat" className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">
+                Đăng tin ngay
+              </Link>
+              <button
+                type="button"
+                className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-white"
+                onClick={() => {
+                  setShowSignupBeanWelcome(false);
+                  router.replace('/tai-khoan' as never);
+                }}
+              >
+                Ẩn thông báo
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
           <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
             <h2 className="text-lg font-semibold text-slate-900">Thông tin tài khoản</h2>
@@ -932,8 +961,7 @@ export default function AccountHomePage() {
           <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-emerald-900">Số dư Bean</h2>
             <p className="mt-3 text-3xl font-bold text-emerald-700">{user.beanBalance}</p>
-            <p className="mt-2 text-sm text-emerald-900/80">Bean bị trừ khi dùng gói THƯỜNG/VIP. Gói FREE không trừ Bean.</p>
-            <p className="mt-1 text-sm text-emerald-900/80">Lượt FREE còn lại: <span className="font-semibold">{user.freePostsRemaining ?? 0}</span></p>
+            <p className="mt-2 text-sm text-emerald-900/80">Đăng tin thường trừ 5 Bean. Đăng tin VIP trừ 50 Bean.</p>
             <div className="mt-4 grid gap-2">
               <Link href="/dang-tin-nha-dat" className="rounded-lg bg-emerald-600 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-emerald-700">
                 Đăng tin mới

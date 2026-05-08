@@ -235,7 +235,7 @@ export default function PostListingDanangPage() {
   const [user, setUser] = useState<AuthUser | null>(() => readAuthUser());
   const [identifier, setIdentifier] = useState('testuser@nhadatdn.local');
   const [password, setPassword] = useState('Test@123456');
-  const [packageType, setPackageType] = useState<'FREE' | 'NORMAL' | 'VIP'>('FREE');
+  const [packageType, setPackageType] = useState<'NORMAL' | 'VIP'>('NORMAL');
   const [dealType, setDealType] = useState<'can-ban' | 'can-mua' | 'cho-thue'>('can-ban');
   const [houseDirection, setHouseDirection] = useState('');
   const [catalog, setCatalog] = useState<DanangCatalog | null>(null);
@@ -360,7 +360,7 @@ export default function PostListingDanangPage() {
     setAddress('');
     setAddressSuggestions([]);
     setHouseDirection('');
-    setPackageType('FREE');
+    setPackageType('NORMAL');
     setDealType('can-ban');
     setFormKey((prev) => prev + 1);
   }
@@ -642,11 +642,9 @@ export default function PostListingDanangPage() {
     }
 
     const newBalance = Number(data.beanBalance ?? activeUser.beanBalance - beanCost);
-    const freeRemain = packageType === 'FREE' ? Math.max(0, (activeUser.freePostsRemaining ?? 0) - 1) : activeUser.freePostsRemaining ?? 0;
-
     setUser((prev) => {
       if (!prev) return prev;
-      const nextUser = { ...prev, beanBalance: newBalance, freePostsRemaining: freeRemain };
+      const nextUser = { ...prev, beanBalance: newBalance };
       writeAuthUser(nextUser);
       return nextUser;
     });
@@ -704,7 +702,7 @@ export default function PostListingDanangPage() {
           <>
             <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm text-sm text-slate-700">
               <p>
-                Người đăng: <span className="font-semibold">{user.fullName}</span> | Bean: <span className="font-semibold">{user.beanBalance}</span> | FREE còn lại: <span className="font-semibold">{user.freePostsRemaining ?? 0}</span>
+                Người đăng: <span className="font-semibold">{user.fullName}</span> | Bean: <span className="font-semibold">{user.beanBalance}</span>
               </p>
               <p className="mt-1">Liên hệ mặc định: <span className="font-semibold">{user.phone || 'Chưa cập nhật số điện thoại'}</span></p>
             </section>
@@ -942,10 +940,9 @@ export default function PostListingDanangPage() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <select name="packageType" className="rounded border px-3 py-2" value={packageType} onChange={(event) => setPackageType(event.target.value as 'FREE' | 'NORMAL' | 'VIP')}>
-                    <option value="FREE">Tin FREE (0 Bean, trừ 1 lượt FREE)</option>
-                    <option value="NORMAL">Tin THƯỜNG (-5 Bean)</option>
-                    <option value="VIP">Tin VIP (-50 Bean)</option>
+                  <select name="packageType" className="rounded border px-3 py-2" value={packageType} onChange={(event) => setPackageType(event.target.value as 'NORMAL' | 'VIP')}>
+                    <option value="NORMAL">Đăng tin thường (-5 Bean)</option>
+                    <option value="VIP">Đăng tin VIP (-50 Bean)</option>
                   </select>
                   <button className="rounded bg-brand-700 px-5 py-2 text-white" type="submit">
                     Đăng tin

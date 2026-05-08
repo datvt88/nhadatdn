@@ -14,7 +14,6 @@ type UserItem = {
   phone?: string;
   role: string;
   beanBalance: number;
-  freePostsRemaining?: number;
   emailVerified?: boolean;
   phoneVerified?: boolean;
   authProvider?: string;
@@ -22,6 +21,11 @@ type UserItem = {
   walletAddress?: string;
   accountStatus?: string;
   bannedReason?: string;
+};
+
+type SignupBonusConfig = {
+  beans: number;
+  updatedAt?: string | null;
 };
 
 function normalizeAccountStatus(status?: string): 'ACTIVE' | 'BANNED' {
@@ -46,8 +50,9 @@ export default function AdminUsersPage() {
   const [beanDeltaByUser, setBeanDeltaByUser] = useState<Record<number, string>>({});
   const [beanNoteByUser, setBeanNoteByUser] = useState<Record<number, string>>({});
   const [beanSourceByUser, setBeanSourceByUser] = useState<Record<number, string>>({});
-  const [freeDeltaByUser, setFreeDeltaByUser] = useState<Record<number, string>>({});
   const [statusReasonByUser, setStatusReasonByUser] = useState<Record<number, string>>({});
+  const [signupBonusConfig, setSignupBonusConfig] = useState<SignupBonusConfig>({ beans: 100, updatedAt: null });
+  const [signupBonusDraft, setSignupBonusDraft] = useState('100');
 
   const [solAmountByUser, setSolAmountByUser] = useState<Record<number, string>>({});
   const [solDirectionByUser, setSolDirectionByUser] = useState<Record<number, string>>({});
@@ -102,9 +107,30 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function loadSignupBonusConfig() {
+    if (!hasAdminAccess(actorRole)) return;
+    const res = await fetch(`${API_BASE}/admin/users/signup-bonus`, {
+      headers: authHeaders(readAuthUser()),
+      cache: 'no-store',
+    });
+    const payload = (await res.json().catch(() => ({}))) as Partial<SignupBonusConfig> & { error?: string };
+    if (!res.ok) {
+      setStatus(`Lỗi tải cấu hình Bean thưởng đăng ký: ${String(payload.error ?? 'unknown')}`);
+      return;
+    }
+    const beans = Number(payload.beans ?? 100);
+    const nextConfig = {
+      beans: Number.isFinite(beans) ? beans : 100,
+      updatedAt: payload.updatedAt ?? null,
+    };
+    setSignupBonusConfig(nextConfig);
+    setSignupBonusDraft(String(nextConfig.beans));
+  }
+
   useEffect(() => {
     if (hydrated && hasAdminAccess(actorRole)) {
       void loadUsers();
+      void loadSignupBonusConfig();
     }
   }, [hydrated, actorRole]);
 
@@ -132,25 +158,29 @@ export default function AdminUsersPage() {
     await loadUsers();
   }
 
-  async function adjustFreePosts(userId: number) {
-    const amount = Number(freeDeltaByUser[userId] ?? '0');
-    const res = await fetch(`${API_BASE}/admin/users/${userId}/free-posts/adjust`, {
-      method: 'POST',
+  async function saveSignupBonusConfig() {
+    const beans = Number(signupBonusDraft);
+    if (!Number.isFinite(beans) || beans < 0) {
+      setStatus('Bean thưởng đăng ký phải là số không âm.');
+      return;
+    }
+    const res = await fetch(`${API_BASE}/admin/users/signup-bonus`, {
+      method: 'PATCH',
       headers: {
         'content-type': 'application/json',
         ...authHeaders(readAuthUser()),
       },
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ beans: Math.floor(beans) }),
     });
-
-    const payload = await res.json();
+    const payload = (await res.json().catch(() => ({}))) as Partial<SignupBonusConfig> & { error?: string };
     if (!res.ok) {
-      setStatus(`Lỗi cập nhật lượt FREE user ${userId}: ${String(payload.error ?? 'unknown')}`);
+      setStatus(`Lỗi lưu Bean thưởng đăng ký: ${String(payload.error ?? 'unknown')}`);
       return;
     }
-
-    setStatus(`Cập nhật lượt FREE thành công user ${userId}. Còn lại: ${payload.freePostsRemaining}`);
-    await loadUsers();
+    const nextBeans = Number(payload.beans ?? Math.floor(beans));
+    setSignupBonusConfig({ beans: nextBeans, updatedAt: payload.updatedAt ?? null });
+    setSignupBonusDraft(String(nextBeans));
+    setStatus(`Đã lưu Bean thưởng tài khoản mới: ${nextBeans} Bean.`);
   }
 
   async function updateUserStatus(user: UserItem, nextStatus: 'ACTIVE' | 'BANNED') {
@@ -235,7 +265,7 @@ export default function AdminUsersPage() {
     <main>
       <HeaderNav />
       <section className="admin-neo mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <h1 className="text-2xl font-semibold">Quản trị Bean và lượt FREE</h1>
+        <h1 className="text-2xl font-semibold">Quản trị Bean</h1>
 
         <div className="mt-3 flex flex-wrap gap-2">
           <Link href="/admin/users" className="rounded bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white">Bean</Link>
@@ -256,6 +286,30 @@ export default function AdminUsersPage() {
 
         {status ? <p className="mt-3 text-sm text-slate-700">{status}</p> : null}
 
+        <article className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <h2 className="text-lg font-semibold text-emerald-950">Bean thưởng khi đăng ký mới</h2>
+              <p className="mt-1 text-sm text-emerald-900/80">
+                Mặc định 100 Bean để tài khoản mới có thể đăng 20 tin thường hoặc 2 tin VIP.
+              </p>
+              {signupBonusConfig.updatedAt ? <p className="mt-1 text-xs text-emerald-800">Cập nhật: {formatDateTime(signupBonusConfig.updatedAt)}</p> : null}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="number"
+                min={0}
+                value={signupBonusDraft}
+                onChange={(event) => setSignupBonusDraft(event.target.value)}
+                className="w-full rounded border border-emerald-300 bg-white px-3 py-2 sm:w-36"
+              />
+              <button className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white" onClick={() => void saveSignupBonusConfig()}>
+                Lưu cấu hình
+              </button>
+            </div>
+          </div>
+        </article>
+
         <div className="mt-6 space-y-4">
           {filteredUsers.map((user) => {
             const accountStatus = normalizeAccountStatus(user.accountStatus);
@@ -274,7 +328,6 @@ export default function AdminUsersPage() {
                         {accountStatus === 'BANNED' ? 'Bị khóa' : 'Đang hoạt động'}
                       </span>
                       <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">Bean: {user.beanBalance}</span>
-                      <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">FREE: {user.freePostsRemaining ?? 0}</span>
                     </div>
                     <div className="mt-2 text-xs">
                       <div className={user.emailVerified ? 'text-emerald-700' : 'text-slate-500'}>Email: {user.emailVerified ? 'Đã xác thực' : 'Chưa xác thực'}</div>
@@ -299,10 +352,8 @@ export default function AdminUsersPage() {
                   </section>
 
                   <section className="rounded-lg border border-slate-100 p-3">
-                    <p className="text-xs uppercase text-slate-500">FREE quản trị & tài khoản</p>
+                    <p className="text-xs uppercase text-slate-500">Trạng thái tài khoản</p>
                     <div className="mt-2 grid gap-2">
-                      <input value={freeDeltaByUser[user.id] ?? ''} onChange={(event) => setFreeDeltaByUser((prev) => ({ ...prev, [user.id]: event.target.value }))} placeholder="vd: 5 hoặc -1" className="w-full rounded border px-2 py-1" />
-                      <button className="rounded bg-emerald-600 px-3 py-2 text-sm text-white" onClick={() => void adjustFreePosts(user.id)}>Cấp lượt FREE</button>
                       <input value={statusReasonByUser[user.id] ?? ''} onChange={(event) => setStatusReasonByUser((prev) => ({ ...prev, [user.id]: event.target.value }))} placeholder="Lý do ban/mở" className="w-full rounded border px-2 py-1" />
                       {accountStatus === 'BANNED' ? (
                         <button className="rounded bg-emerald-600 px-3 py-2 text-sm text-white" onClick={() => void updateUserStatus(user, 'ACTIVE')}>Kích hoạt lại</button>

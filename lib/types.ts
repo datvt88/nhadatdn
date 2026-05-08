@@ -24,7 +24,7 @@ export interface ListingItem {
   district?: string;
   coverImage?: string | null;
   images?: ListingImageItem[];
-  packageType?: 'VIP' | 'NORMAL' | 'FREE';
+  packageType?: 'VIP' | 'NORMAL';
   status?: string;
   created_at?: string;
 }

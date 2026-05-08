@@ -1,10 +1,9 @@
 ﻿export type DealType = 'can-ban' | 'can-mua' | 'cho-thue';
 
-export function normalizePackageType(value?: string): 'VIP' | 'NORMAL' | 'FREE' {
+export function normalizePackageType(value?: string): 'VIP' | 'NORMAL' {
   const normalized = (value ?? '').trim().toUpperCase();
   if (normalized === 'VIP') return 'VIP';
-  if (normalized === 'NORMAL') return 'NORMAL';
-  return 'FREE';
+  return 'NORMAL';
 }
 
 export function packageBadgeLabel(value?: string): string {

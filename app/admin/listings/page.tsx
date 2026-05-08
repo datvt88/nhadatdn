@@ -260,7 +260,7 @@ export default function AdminListingsPage() {
     setSavingDisplayConfig(true);
     const res = await fetch(`${API_BASE}/admin/listings/display-config`, {
       method: 'PATCH', headers: { 'content-type': 'application/json', ...authHeaders(readAuthUser()) },
-      body: JSON.stringify({ vipWeight: displayConfig.vipWeight, normalWeight: displayConfig.normalWeight, freeWeight: displayConfig.freeWeight }),
+      body: JSON.stringify({ vipWeight: displayConfig.vipWeight, normalWeight: displayConfig.normalWeight }),
     });
     const payload = (await res.json().catch(() => ({}))) as ListingDisplayConfig & { error?: string };
     setSavingDisplayConfig(false);
@@ -498,10 +498,9 @@ export default function AdminListingsPage() {
 
         <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Cấu hình ưu tiên hiển thị trang chủ</h2>
-          <div className="mt-3 grid gap-3 md:grid-cols-4">
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
             <input type="number" className="rounded border px-2 py-2" value={displayConfig.vipWeight} onChange={(e) => setDisplayConfig((p) => ({ ...p, vipWeight: Number.parseInt(e.target.value, 10) || 0 }))} />
             <input type="number" className="rounded border px-2 py-2" value={displayConfig.normalWeight} onChange={(e) => setDisplayConfig((p) => ({ ...p, normalWeight: Number.parseInt(e.target.value, 10) || 0 }))} />
-            <input type="number" className="rounded border px-2 py-2" value={displayConfig.freeWeight} onChange={(e) => setDisplayConfig((p) => ({ ...p, freeWeight: Number.parseInt(e.target.value, 10) || 0 }))} />
             <button className="rounded bg-[var(--brand-primary)] px-4 py-2 text-white" disabled={savingDisplayConfig} onClick={() => void saveDisplayConfig()}>{savingDisplayConfig ? 'Đang lưu...' : 'Lưu cấu hình'}</button>
           </div>
         </section>

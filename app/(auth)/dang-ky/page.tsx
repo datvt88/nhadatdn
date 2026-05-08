@@ -32,6 +32,11 @@ function defaultRedirectByRole(role: string | undefined): string {
   return hasAdminAccess(role) ? '/quan-tri' : '/tai-khoan';
 }
 
+function registerRedirectByRole(role: string | undefined): string {
+  const basePath = defaultRedirectByRole(role);
+  return basePath === '/tai-khoan' ? '/tai-khoan?welcome=bean' : basePath;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
@@ -185,8 +190,8 @@ export default function RegisterPage() {
       }
 
       writeAuthUser({ ...data.user, ...(typeof data.sessionToken === 'string' && data.sessionToken.trim() !== '' ? { sessionToken: data.sessionToken } : {}) });
-      setStatus('Đăng ký Google thành công.');
-      router.replace(defaultRedirectByRole(data.user.role) as never);
+      setStatus('Đăng ký Google thành công. Tài khoản mới được tặng 100 Bean để sử dụng đăng tin miễn phí.');
+      router.replace(registerRedirectByRole(data.user.role) as never);
       router.refresh();
     } catch (error) {
       setStatus('Đăng ký Google thất bại: ' + String(error));
@@ -211,8 +216,8 @@ export default function RegisterPage() {
     }
 
     writeAuthUser({ ...data.user, ...(typeof data.sessionToken === 'string' && data.sessionToken.trim() !== '' ? { sessionToken: data.sessionToken } : {}) });
-    setStatus('Đăng ký thành công. Bạn đã có 10 tin đăng FREE (0 Bean).');
-    router.replace(defaultRedirectByRole(data.user.role) as never);
+    setStatus('Đăng ký thành công. Tài khoản mới được tặng 100 Bean để sử dụng đăng tin miễn phí.');
+    router.replace(registerRedirectByRole(data.user.role) as never);
     router.refresh();
   }
 
