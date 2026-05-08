@@ -29,6 +29,9 @@ const cspConnectSrcAllowlist = new Set([
   'https://accounts.google.com',
   'https://oauth2.googleapis.com',
   'https://www.googleapis.com',
+  'https://www.google-analytics.com',
+  'https://region1.google-analytics.com',
+  'https://stats.g.doubleclick.net',
 ]);
 
 if (!isProduction) {
@@ -52,7 +55,7 @@ const contentSecurityPolicy = [
   "object-src 'none'",
   "img-src 'self' data: blob: https: http:",
   "media-src 'self' data: blob: https: http:",
-  "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com",
+  "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://www.google-analytics.com",
   "style-src 'self' 'unsafe-inline'",
   `connect-src ${Array.from(cspConnectSrcAllowlist).join(' ')}`,
   "frame-src 'self' https://www.google.com https://maps.google.com https://accounts.google.com",

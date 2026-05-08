@@ -480,10 +480,13 @@ export function HomeRealtime({
                   <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
                 </svg>
                 <input
+                  role="combobox"
                   aria-label="Tìm kiếm bất động sản Đà Nẵng"
                   aria-autocomplete="list"
                   aria-expanded={suggestionsOpen && keywordSuggestions.length > 0}
+                  aria-haspopup="listbox"
                   aria-controls="home-keyword-suggestions"
+                  aria-activedescendant={suggestionNavigationActive && activeSuggestionIndex >= 0 ? `home-keyword-suggestion-${activeSuggestionIndex}` : undefined}
                   placeholder="Từ khóa"
                   className="h-full w-full bg-transparent text-base text-slate-700 outline-none placeholder:text-slate-400 sm:text-lg"
                   value={keyword}
@@ -534,6 +537,8 @@ export function HomeRealtime({
               {suggestionsOpen && (keywordSuggestions.length > 0 || suggestionsLoading) ? (
                 <div
                   id="home-keyword-suggestions"
+                  role="listbox"
+                  aria-label="Gợi ý tìm kiếm bất động sản Đà Nẵng"
                   className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl"
                 >
                   <div className="max-h-80 overflow-y-auto py-2">
@@ -542,6 +547,9 @@ export function HomeRealtime({
                       return (
                         <button
                           key={item.id}
+                          id={`home-keyword-suggestion-${index}`}
+                          role="option"
+                          aria-selected={isActive}
                           type="button"
                           className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${isActive ? 'bg-[rgba(40,189,191,0.10)]' : 'bg-white hover:bg-slate-50'}`}
                           onMouseDown={(event) => event.preventDefault()}
