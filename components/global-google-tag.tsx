@@ -1,20 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Script from 'next/script';
 
 type GlobalGoogleTagProps = {
   googleTagId: string;
 };
 
+const DEFAULT_LOAD_DELAY_MS = 1500;
+const CATEGORY_LOAD_DELAY_MS = 12000;
+const IDLE_TIMEOUT_MS = 4000;
+
+function getLoadDelay(pathname: string | null): number {
+  const normalizedPath = pathname || '/';
+  if (normalizedPath === '/mua-ban-nha-dat' || normalizedPath === '/cho-thue-nha-dat') {
+    return CATEGORY_LOAD_DELAY_MS;
+  }
+  return DEFAULT_LOAD_DELAY_MS;
+}
+
 export function GlobalGoogleTag({ googleTagId }: GlobalGoogleTagProps) {
   const [shouldLoad, setShouldLoad] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const idleWindow = window as Window & {
       requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
       cancelIdleCallback?: (handle: number) => void;
     };
+    const loadDelayMs = getLoadDelay(pathname);
     let cancelled = false;
     let timeoutId: number | undefined;
     let idleId: number | undefined;
@@ -29,14 +44,14 @@ export function GlobalGoogleTag({ googleTagId }: GlobalGoogleTagProps) {
       if (typeof idleWindow.requestIdleCallback === 'function') {
         idleId = idleWindow.requestIdleCallback(
           () => {
-            timeoutId = window.setTimeout(enableLoad, 1500);
+            timeoutId = window.setTimeout(enableLoad, loadDelayMs);
           },
-          { timeout: 4000 },
+          { timeout: IDLE_TIMEOUT_MS },
         );
         return;
       }
 
-      timeoutId = window.setTimeout(enableLoad, 4000);
+      timeoutId = window.setTimeout(enableLoad, IDLE_TIMEOUT_MS + loadDelayMs);
     };
 
     if (document.readyState === 'complete') {
@@ -55,7 +70,7 @@ export function GlobalGoogleTag({ googleTagId }: GlobalGoogleTagProps) {
       }
       window.removeEventListener('load', scheduleLoad);
     };
-  }, []);
+  }, [pathname]);
 
   if (!shouldLoad) {
     return null;
