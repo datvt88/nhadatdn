@@ -376,7 +376,7 @@ export function HomeRealtime({
         if (active) {
           setRemoteSuggestions([]);
         }
-        } finally {
+      } finally {
         if (active) {
           setSuggestionsLoading(false);
           setActiveSuggestionIndex(-1);

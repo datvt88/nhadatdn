@@ -1,4 +1,4 @@
-﻿import type { ListingItem } from '../lib/types';
+import type { ListingItem } from '../lib/types';
 import { ListingCard } from './listing-card';
 
 function sectionTitle(id: string, label: string) {
@@ -34,7 +34,7 @@ export function ListingShowcase({
   if (listings.length === 0) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
-        ChÆ°a cÃ³ tin Ä‘Äƒng phÃ¹ há»£p bá»™ lá»c. Vui lÃ²ng thá»­ Ä‘iá»u kiá»‡n khÃ¡c.
+        Chưa có tin đăng phù hợp bộ lọc. Vui lòng thử điều kiện khác.
       </section>
     );
   }
@@ -51,17 +51,17 @@ export function ListingShowcase({
   return (
     <div className="space-y-6">
       <section>
-        {sectionTitle('homepage-latest', 'Báº¥t Ä‘á»™ng sáº£n ná»•i báº­t má»›i nháº¥t')}
+        {sectionTitle('homepage-latest', 'Bất động sản nổi bật mới nhất')}
         <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <p>
-            Hiá»ƒn thá»‹ <span className="font-semibold text-slate-900">{startItem}</span>
+            Hiển thị <span className="font-semibold text-slate-900">{startItem}</span>
             {' - '}
             <span className="font-semibold text-slate-900">{endItem}</span>
             {' / '}
             <span className="font-semibold text-slate-900">{total}</span> tin
           </p>
           <p className="text-xs text-slate-500 sm:text-sm">
-            {loading ? 'Äang cáº­p nháº­t káº¿t quáº£...' : `Trang ${safeCurrentPage}/${totalPages}`}
+            {loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}
           </p>
         </div>
 
@@ -72,10 +72,9 @@ export function ListingShowcase({
         </div>
 
         {totalPages > 1 ? (
-          <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="PhÃ¢n trang trang chá»§">
+          <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang trang chủ">
             {useLinkPagination && buildPageHref ? (
               <a
-               
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
                 href={buildPageHref(safeCurrentPage - 1)}
                 rel="prev"
@@ -83,7 +82,7 @@ export function ListingShowcase({
                 tabIndex={safeCurrentPage <= 1 ? -1 : undefined}
                 style={safeCurrentPage <= 1 ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
               >
-                TrÆ°á»›c
+                Trước
               </a>
             ) : (
               <button
@@ -92,7 +91,7 @@ export function ListingShowcase({
                 onClick={() => onPageChange?.(safeCurrentPage - 1)}
                 disabled={safeCurrentPage <= 1 || loading}
               >
-                TrÆ°á»›c
+                Trước
               </button>
             )}
             {pages.map((page, index) => {
@@ -100,10 +99,9 @@ export function ListingShowcase({
               const gapBefore = typeof prev === 'number' && page - prev > 1;
               return (
                 <span key={`page-${page}`} className="contents">
-                  {gapBefore ? <span className="px-1 text-slate-400">â€¦</span> : null}
+                  {gapBefore ? <span className="px-1 text-slate-400">…</span> : null}
                   {useLinkPagination && buildPageHref ? (
                     <a
-                     
                       className={`rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition ${
                         page === safeCurrentPage
                           ? 'bg-[var(--brand-primary)] text-white'
@@ -137,7 +135,6 @@ export function ListingShowcase({
             })}
             {useLinkPagination && buildPageHref ? (
               <a
-               
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]"
                 href={buildPageHref(safeCurrentPage + 1)}
                 rel="next"
@@ -163,4 +160,3 @@ export function ListingShowcase({
     </div>
   );
 }
-
