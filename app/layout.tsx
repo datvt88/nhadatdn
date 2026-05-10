@@ -1,7 +1,7 @@
 ﻿import { Montserrat } from 'next/font/google';
-import Script from 'next/script';
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { GlobalGoogleTag } from '../components/global-google-tag';
 import { fetchJsonOr } from '../lib/api';
 import { getSiteUrl } from '../lib/seo';
 
@@ -69,25 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="vi">
       <body className={montserrat069ab3.variable}>
-        {googleTagEnabled ? (
-          <>
-            <Script async src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(googleTagId)}`} strategy="afterInteractive" />
-            <Script
-              id="nhadatdn-google-tag"
-              strategy="afterInteractive"
-              dangerouslySetInnerHTML={{
-                __html: `window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-gtag('js', new Date());
-gtag('set', 'allow_ad_personalization_signals', false);
-gtag('config', ${JSON.stringify(googleTagId)}, {
-  allow_ad_personalization_signals: false,
-  allow_google_signals: false
-});`,
-              }}
-            />
-          </>
-        ) : null}
+        {googleTagEnabled ? <GlobalGoogleTag googleTagId={googleTagId} /> : null}
         {children}
       </body>
     </html>
