@@ -7,7 +7,7 @@ import { ListingImageGallery } from '@/components/listing-image-gallery';
 import { SellerRatingPanel } from '@/components/seller-rating-panel';
 import { fetchJsonOr } from '@/lib/api';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '@/lib/listing-labels';
-import { formatAreaM2, formatListingPrice, formatPricePerM2 } from '@/lib/listing-presenter';
+import { formatAreaM2, formatListingPrice, formatPricePerM2, resolveListingCreatedAt, resolveListingUpdatedAt, resolveSeoImageUrls, type ListingImageLike } from '@/lib/listing-presenter';
 import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '@/lib/listing-route';
 import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '@/lib/seo';
 import type { ListingItem } from '@/lib/types';
@@ -15,7 +15,7 @@ import type { ListingItem } from '@/lib/types';
 export const revalidate = 60;
 export const dynamic = 'force-dynamic';
 
-type ListingImage = { url?: string; webpUrl?: string };
+type ListingImage = ListingImageLike;
 type ListingDetail = Omit<ListingItem, 'city' | 'district'> & {
   images?: ListingImage[];
   city?: string | { name?: string };
@@ -121,17 +121,10 @@ function buildMapQuery(detail: ListingDetail): string {
 }
 
 function resolveImages(detail: ListingDetail): string[] {
-  const remote = (detail.images ?? [])
-    .map((img) => {
-      const webp = typeof img.webpUrl === 'string' ? img.webpUrl.trim() : '';
-      const original = typeof img.url === 'string' ? img.url.trim() : '';
-      return webp || original || '';
-    })
-    .filter((img): img is string => img.length > 0);
-
-  if (remote.length > 0) return remote;
-  if (detail.coverImage) return [detail.coverImage];
-  return [];
+  return resolveSeoImageUrls({
+    images: detail.images,
+    coverImage: detail.coverImage,
+  });
 }
 
 function buildSeoDescription(detail: ListingDetail): string {
@@ -182,6 +175,13 @@ function formatAccountAge(createdAt?: string): string {
   }
   const days = Math.max(1, Math.floor(diffMs / dayMs));
   return `Tham gia từ ${days} ngày trước`;
+}
+
+function formatPublishedDate(value?: string): string {
+  if (!value) return 'Đăng gần đây';
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return 'Đăng gần đây';
+  return `Đăng ngày ${time.toLocaleDateString('vi-VN')}`;
 }
 
 async function getListingBySlug(slug: string): Promise<ListingDetail | null> {
@@ -271,6 +271,8 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const sellerLabel = isVerifiedSeller ? 'Người bán đã xác thực' : 'Người bán mới';
   const accountAgeText = formatAccountAge(listing.contact?.accountCreatedAt);
   const sellerUserId = Number(listing.contact?.userId ?? 0);
+  const publishedAt = resolveListingCreatedAt(listing);
+  const modifiedAt = resolveListingUpdatedAt(listing);
   const canonicalCategoryPath = categoryPathByDealType(params.dealType);
   const canonicalDealType = dealTypeFromCategorySegment(params.dealType);
   const completedLabel = canonicalDealType === 'cho-thue' ? 'Đã cho thuê' : 'Đã bán';
@@ -281,6 +283,25 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const locationLabel = districtName(listing);
   const siteUrl = getSiteUrl();
   const listingAbsoluteUrl = toAbsoluteUrl(path);
+  const sellerPublicUrl =
+    sellerUserId > 0
+      ? toAbsoluteUrl(`${canonicalCategoryPath}?posterId=${encodeURIComponent(String(sellerUserId))}`)
+      : undefined;
+  const publisherSchema = {
+    '@type': 'Organization',
+    name: 'NhadatDN',
+    url: siteUrl,
+    logo: {
+      '@type': 'ImageObject',
+      url: toAbsoluteUrl('/logo-nhadatdn.svg'),
+    },
+  };
+  const sellerSchema = {
+    '@type': 'Person',
+    name: contactName,
+    ...(sellerPublicUrl ? { url: sellerPublicUrl } : {}),
+    ...(sellerUserId > 0 ? { identifier: String(sellerUserId) } : {}),
+  };
 
   const jsonLdListing = {
     '@context': 'https://schema.org',
@@ -288,8 +309,37 @@ export default async function ListingDetailPage({ params }: { params: { dealType
     name: listing.title,
     description: buildSeoDescription(listing),
     url: listingAbsoluteUrl,
-    ...(gallery.length > 0 ? { image: gallery } : {}),
-    datePosted: listing.created_at,
+    ...(gallery.length > 0
+      ? {
+          image: gallery,
+          associatedMedia: gallery.map((url) => ({
+            '@type': 'ImageObject',
+            url,
+            contentUrl: url,
+            caption: listing.title,
+          })),
+        }
+      : {}),
+    ...(publishedAt ? { datePosted: publishedAt, datePublished: publishedAt } : {}),
+    ...(modifiedAt ? { dateModified: modifiedAt } : {}),
+    author: sellerSchema,
+    seller: sellerSchema,
+    publisher: publisherSchema,
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': listingAbsoluteUrl,
+    },
+    ...(isVerifiedSeller
+      ? {
+          additionalProperty: [
+            {
+              '@type': 'PropertyValue',
+              name: 'sellerVerified',
+              value: 'true',
+            },
+          ],
+        }
+      : {}),
     offers: { '@type': 'Offer', priceCurrency: 'VND', price: Number(listing.price), availability: 'https://schema.org/InStock' },
     address: { '@type': 'PostalAddress', streetAddress: listing.address, addressLocality: toLocation(listing) },
   };
@@ -342,6 +392,9 @@ export default async function ListingDetailPage({ params }: { params: { dealType
                 <span className="rounded bg-cyan-100 px-2 py-1 text-xs font-semibold text-[var(--brand-primary-hover)]">{listingStatusLabel(listing.status, dealType)}</span>
               </div>
               <p className="text-sm text-slate-600">Địa chỉ: {toLocation(listing)}</p>
+              <p className="text-xs text-slate-500">
+                {formatPublishedDate(publishedAt)} · Người đăng: {contactName}
+              </p>
             </header>
 
             <ListingImageGallery images={gallery} title={listing.title} />

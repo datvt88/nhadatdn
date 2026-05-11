@@ -66,8 +66,8 @@ export function ListingShowcase({
         </div>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {listings.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} />
+          {listings.map((listing, index) => (
+            <ListingCard key={listing.id} listing={listing} priorityImage={index === 0} />
           ))}
         </div>
 

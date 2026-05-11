@@ -291,12 +291,6 @@ export function HomeRealtime({
   }, [districts, keyword, remoteSuggestions]);
 
   useEffect(() => {
-    setListings(initialListings);
-    setTotal(initialTotal);
-    setCurrentPage(initialPage);
-  }, [initialListings, initialPage, initialTotal]);
-
-  useEffect(() => {
     if (initialDistricts.length > 0) {
       setDistricts(initialDistricts);
       return;

@@ -1,6 +1,10 @@
-﻿import type { ListingItem } from './types';
+import { toAbsoluteUrl } from './seo';
+import type { ListingItem } from './types';
 
 const IMAGE_CDN_BASE = (process.env.NEXT_PUBLIC_IMAGE_CDN_BASE ?? '').trim().replace(/\/$/, '');
+const SITE_URL = toAbsoluteUrl('/');
+
+export type ListingImageLike = { url?: unknown; webpUrl?: unknown };
 
 function normalizeListingImageUrl(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
@@ -39,27 +43,53 @@ function mapToCdnIfNeeded(url: string): string {
   return url;
 }
 
-export function resolveListingImages(listing: ListingItem): string[] {
-  const rawImages = (listing as { images?: unknown }).images;
-  const normalized = (Array.isArray(rawImages) ? rawImages : [])
-    .map((img) => {
-      if (!img || typeof img !== 'object') return null;
-      const record = img as { webpUrl?: unknown; url?: unknown };
-      return normalizeListingImageUrl(record.webpUrl) ?? normalizeListingImageUrl(record.url);
-    })
+function toRelativeIfSameSite(url: string): string {
+  if (url.startsWith(SITE_URL)) {
+    return url.slice(SITE_URL.length - 1);
+  }
+  return url;
+}
+
+export function resolveSeoImageUrls(input: { images?: ListingImageLike[] | undefined; coverImage?: unknown }): string[] {
+  const normalized = (Array.isArray(input.images) ? input.images : [])
+    .map((img) => normalizeListingImageUrl(img?.webpUrl) ?? normalizeListingImageUrl(img?.url))
     .filter((img): img is string => Boolean(img))
-    .map(mapToCdnIfNeeded);
+    .map(mapToCdnIfNeeded)
+    .map(toAbsoluteUrl);
 
   if (normalized.length > 0) {
     return Array.from(new Set(normalized));
   }
 
-  const cover = normalizeListingImageUrl(listing.coverImage ?? null);
-  return cover ? [mapToCdnIfNeeded(cover)] : [];
+  const cover = normalizeListingImageUrl(input.coverImage ?? null);
+  return cover ? [toAbsoluteUrl(mapToCdnIfNeeded(cover))] : [];
+}
+
+export function resolveListingImages(listing: ListingItem): string[] {
+  return resolveSeoImageUrls({
+    images: ((listing as { images?: ListingImageLike[] }).images ?? []) as ListingImageLike[],
+    coverImage: listing.coverImage ?? null,
+  }).map(toRelativeIfSameSite);
 }
 
 export function pickListingImage(listing: ListingItem): string {
   return resolveListingImages(listing)[0] ?? '';
+}
+
+export function resolveListingCreatedAt(listing: ListingItem | { createdAt?: unknown; created_at?: unknown }): string {
+  if (typeof listing.createdAt === 'string' && listing.createdAt.trim()) return listing.createdAt.trim();
+  if (typeof listing.created_at === 'string' && listing.created_at.trim()) return listing.created_at.trim();
+  return '';
+}
+
+export function resolveListingUpdatedAt(listing: ListingItem | { updatedAt?: unknown; updated_at?: unknown }): string {
+  if (typeof (listing as { updatedAt?: unknown }).updatedAt === 'string' && String((listing as { updatedAt?: unknown }).updatedAt).trim()) {
+    return String((listing as { updatedAt?: unknown }).updatedAt).trim();
+  }
+  if (typeof (listing as { updated_at?: unknown }).updated_at === 'string' && String((listing as { updated_at?: unknown }).updated_at).trim()) {
+    return String((listing as { updated_at?: unknown }).updated_at).trim();
+  }
+  return resolveListingCreatedAt(listing as ListingItem);
 }
 
 function formatDecimal(value: number): string {

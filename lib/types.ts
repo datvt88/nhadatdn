@@ -27,6 +27,8 @@ export interface ListingItem {
   packageType?: 'VIP' | 'NORMAL';
   status?: string;
   created_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SearchResponse {

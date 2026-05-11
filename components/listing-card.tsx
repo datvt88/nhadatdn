@@ -5,9 +5,10 @@ import Link from 'next/link';
 import type { Route } from 'next';
 import { useMemo, useState } from 'react';
 import type { ListingItem } from '../lib/types';
-import { formatAreaM2, formatListingPrice, formatPricePerM2, resolveListingImages } from '../lib/listing-presenter';
+import { formatAreaM2, formatListingPrice, formatPricePerM2, resolveListingCreatedAt, resolveListingImages } from '../lib/listing-presenter';
 import { resolveDealType, buildListingPath } from '../lib/listing-route';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '../lib/listing-labels';
+import { toAbsoluteUrl } from '../lib/seo';
 
 function formatSlugLabel(value?: string): string {
   if (!value) return '';
@@ -18,7 +19,13 @@ function formatSlugLabel(value?: string): string {
     .join(' ');
 }
 
-export function ListingCard({ listing }: { listing: ListingItem }) {
+export function ListingCard({
+  listing,
+  priorityImage = false,
+}: {
+  listing: ListingItem;
+  priorityImage?: boolean;
+}) {
   const cityLabel = formatSlugLabel(listing.city);
   const districtLabel = formatSlugLabel(listing.district);
   const location = listing.address ?? [districtLabel, cityLabel].filter(Boolean).join(', ');
@@ -47,6 +54,9 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
   const summary = (listing.description ?? '').replace(/\s+/g, ' ').trim();
   const preview = summary.length > 0 ? summary : 'Tin đăng nhà đất Đà Nẵng đang cập nhật mô tả chi tiết.';
   const pricePerM2 = dealType === 'cho-thue' ? '' : formatPricePerM2(Number(listing.price), Number(listing.area));
+  const publishedAt = resolveListingCreatedAt(listing);
+  const absoluteListingUrl = toAbsoluteUrl(detailPath);
+  const primaryImageUrl = mainImage ? toAbsoluteUrl(mainImage) : '';
 
   const hasImage = mainImage.trim().length > 0;
   const badgeText = packageBadgeLabel(listing.packageType);
@@ -73,8 +83,23 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
 
   return (
     <article
+      itemScope
+      itemType="https://schema.org/RealEstateListing"
       className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--brand-primary)]/40 hover:shadow-md ${isVipPackage ? 'listing-card-vip' : ''}`}
     >
+      <meta itemProp="name" content={listing.title} />
+      <meta itemProp="url" content={absoluteListingUrl} />
+      {primaryImageUrl ? <meta itemProp="image" content={primaryImageUrl} /> : null}
+      {publishedAt ? (
+        <>
+          <meta itemProp="datePublished" content={publishedAt} />
+          <meta itemProp="datePosted" content={publishedAt} />
+        </>
+      ) : null}
+      <span itemProp="publisher" itemScope itemType="https://schema.org/Organization" className="sr-only">
+        <meta itemProp="name" content="NhadatDN" />
+        <meta itemProp="url" content={toAbsoluteUrl('/')} />
+      </span>
       {hasImage && secondaryImages.length > 0 ? (
         <div className="relative grid h-56 grid-cols-4 gap-1 overflow-hidden bg-slate-100 p-1">
           <Link href={detailPath as Route} className="relative col-span-3 row-span-3 overflow-hidden rounded-xl" aria-label={listing.title}>
@@ -83,7 +108,10 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
               alt={listing.title}
               fill
               className="object-cover"
-              sizes="(max-width: 640px) 100vw, (max-width: 1280px) 66vw, 33vw"
+              sizes="(max-width: 640px) 75vw, (max-width: 1280px) 66vw, 33vw"
+              priority={priorityImage}
+              loading={priorityImage ? 'eager' : 'lazy'}
+              fetchPriority={priorityImage ? 'high' : 'low'}
               onError={() => markFailed(mainImage)}
             />
           </Link>
@@ -99,7 +127,9 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
                 alt={`${listing.title} ${index + 2}`}
                 fill
                 className="object-cover"
-                sizes="(max-width: 640px) 25vw, 120px"
+                sizes="(max-width: 640px) 20vw, 120px"
+                loading="lazy"
+                fetchPriority="low"
                 onError={() => markFailed(src)}
               />
             </Link>
@@ -117,6 +147,9 @@ export function ListingCard({ listing }: { listing: ListingItem }) {
               fill
               className="object-cover"
               sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+              priority={priorityImage}
+              loading={priorityImage ? 'eager' : 'lazy'}
+              fetchPriority={priorityImage ? 'high' : 'low'}
               onError={() => markFailed(mainImage)}
             />
           </Link>

@@ -1,7 +1,7 @@
-﻿import { Montserrat } from 'next/font/google';
+import dynamic from 'next/dynamic';
+import { Montserrat } from 'next/font/google';
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import { GlobalGoogleTag } from '../components/global-google-tag';
 import { fetchJsonOr } from '../lib/api';
 import { getSiteUrl } from '../lib/seo';
 
@@ -9,6 +9,11 @@ type GlobalGoogleTagConfig = {
   enabled?: boolean;
   googleTagId?: string;
 };
+
+const GlobalGoogleTag = dynamic(
+  () => import('../components/global-google-tag').then((module) => module.GlobalGoogleTag),
+  { ssr: false },
+);
 
 const montserrat069ab3 = Montserrat({
   subsets: ['latin', 'vietnamese'],
