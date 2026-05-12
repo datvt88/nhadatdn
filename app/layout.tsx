@@ -47,6 +47,11 @@ export const metadata: Metadata = {
     description: 'Khám phá tin đăng mua bán và cho thuê nhà đất Đà Nẵng mới nhất với dữ liệu realtime.',
     images: ['/logo-nhadatdn.svg'],
   },
+  icons: {
+    icon: '/logo-nhadatdn.svg',
+    shortcut: '/logo-nhadatdn.svg',
+    apple: '/logo-nhadatdn.svg',
+  },
   robots: {
     index: true,
     follow: true,

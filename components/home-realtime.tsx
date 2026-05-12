@@ -267,8 +267,11 @@ export function HomeRealtime({
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [selectedSuggestion, setSelectedSuggestion] = useState<KeywordSuggestion | null>(null);
   const [suggestionNavigationActive, setSuggestionNavigationActive] = useState(false);
+  const [shouldLoadDistrictCatalog, setShouldLoadDistrictCatalog] = useState(initialDistricts.length > 0);
   const pathname = usePathname();
   const router = useRouter();
+
+  const requestDistrictCatalog = () => setShouldLoadDistrictCatalog(true);
 
   const hasExtraFilters = useMemo(
     () => Boolean(priceMin || priceMax || areaMin || areaMax || propertyType),
@@ -295,6 +298,7 @@ export function HomeRealtime({
       setDistricts(initialDistricts);
       return;
     }
+    if (!shouldLoadDistrictCatalog) return;
     let active = true;
     const loadCatalog = async () => {
       const res = await fetch(`${API_BASE}/locations/danang`, { cache: 'no-store' });
@@ -307,7 +311,7 @@ export function HomeRealtime({
     return () => {
       active = false;
     };
-  }, [initialDistricts]);
+  }, [initialDistricts, shouldLoadDistrictCatalog]);
 
   useEffect(() => {
     const normalizedKeyword = normalizeVietnameseKeyword(keyword);
@@ -488,6 +492,7 @@ export function HomeRealtime({
                   className="h-full w-full bg-transparent text-base text-slate-700 outline-none placeholder:text-slate-400 sm:text-lg"
                   value={keyword}
                   onFocus={() => {
+                    requestDistrictCatalog();
                     if (keyword.trim()) setSuggestionsOpen(true);
                   }}
                   onBlur={() => {
@@ -578,6 +583,8 @@ export function HomeRealtime({
               aria-label="Lọc theo phường/xã"
               className="h-12 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-14 sm:px-5 sm:text-base"
               value={district}
+              onFocus={requestDistrictCatalog}
+              onPointerDown={requestDistrictCatalog}
               onChange={(event) => {
                 setDistrict(event.target.value);
                 setSelectedSuggestion(null);

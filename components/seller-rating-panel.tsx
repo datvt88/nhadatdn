@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../lib/api';
@@ -17,6 +17,8 @@ type Props = {
   completedLabel?: string;
 };
 
+const LOAD_FALLBACK_DELAY_MS = 30000;
+
 function formatAverage(avg: number): string {
   const rounded = Math.round(avg * 10) / 10;
   return rounded.toFixed(1);
@@ -32,12 +34,47 @@ export function SellerRatingPanel({ sellerUserId, completedLabel = 'Đã bán' }
   const [selectedStars, setSelectedStars] = useState('5');
   const [message, setMessage] = useState('');
   const [tick, setTick] = useState(0);
+  const [shouldLoadSummary, setShouldLoadSummary] = useState(false);
   const user = typeof window !== 'undefined' ? readAuthUser() : null;
 
   const canRate = useMemo(() => Boolean(user && user.id !== sellerUserId), [user, sellerUserId]);
   const hasRated = typeof summary.myRating === 'number';
 
   useEffect(() => {
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    const passiveEvents = new Set<keyof WindowEventMap>(['pointerdown', 'touchstart', 'scroll']);
+    const events: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'scroll', 'keydown'];
+
+    const enableLoad = () => {
+      if (!cancelled) {
+        setShouldLoadSummary(true);
+      }
+    };
+
+    events.forEach((eventName) => {
+      if (passiveEvents.has(eventName)) {
+        window.addEventListener(eventName, enableLoad, { once: true, passive: true });
+      } else {
+        window.addEventListener(eventName, enableLoad, { once: true });
+      }
+    });
+    timeoutId = window.setTimeout(enableLoad, LOAD_FALLBACK_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      if (typeof timeoutId === 'number') {
+        window.clearTimeout(timeoutId);
+      }
+      events.forEach((eventName) => {
+        window.removeEventListener(eventName, enableLoad);
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shouldLoadSummary) return;
+
     let cancelled = false;
     async function loadSummary() {
       const params = new URLSearchParams();
@@ -64,7 +101,7 @@ export function SellerRatingPanel({ sellerUserId, completedLabel = 'Đã bán' }
     return () => {
       cancelled = true;
     };
-  }, [sellerUserId, tick, user?.id]);
+  }, [sellerUserId, shouldLoadSummary, tick, user?.id]);
 
   useEffect(() => {
     return subscribeAuthUser(() => setTick((v) => v + 1));
@@ -128,6 +165,3 @@ export function SellerRatingPanel({ sellerUserId, completedLabel = 'Đã bán' }
     </div>
   );
 }
-
-
-
