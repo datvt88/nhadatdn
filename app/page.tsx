@@ -22,7 +22,7 @@ export async function generateMetadata({
   searchParams?: { page?: string };
 }): Promise<Metadata> {
   return {
-    title: 'Mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng',
+    title: 'Mua bán nhà đất Đà Nẵng',
     description:
       'Mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng cáº­p nháº­t liÃªn tá»¥c: lá»c theo phÆ°á»ng/xÃ£, giÃ¡, diá»‡n tÃ­ch, loáº¡i hÃ¬nh vÃ  xem tin má»›i nháº¥t theo thá»i gian thá»±c.',
     keywords: [
