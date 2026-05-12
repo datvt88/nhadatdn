@@ -76,6 +76,32 @@ type R2StorageConfig = {
   error?: string;
 };
 
+type GoogleDriveBackupConfig = {
+  enabled: boolean;
+  clientId: string;
+  hasClientSecret: boolean;
+  clientSecretMasked: string;
+  hasRefreshToken: boolean;
+  refreshTokenMasked: string;
+  folderId: string;
+  scheduleHour: number;
+  retentionDays: number;
+  lastBackupAt: string;
+  lastStatus: string;
+  lastError: string;
+  updatedAt: string;
+  error?: string;
+};
+
+type GoogleDriveBackupRunResult = {
+  fileName?: string;
+  driveFileId?: string;
+  sizeBytes?: number;
+  deletedOldBackups?: number;
+  completedAt?: string;
+  error?: string;
+};
+
 const emptyMetrics: DashboardMetrics = {
   totalUsers: 0,
   totalListings: 0,
@@ -110,6 +136,22 @@ const emptyR2StorageConfig: R2StorageConfig = {
   updatedAt: '',
 };
 
+const emptyGoogleDriveBackupConfig: GoogleDriveBackupConfig = {
+  enabled: false,
+  clientId: '',
+  hasClientSecret: false,
+  clientSecretMasked: '',
+  hasRefreshToken: false,
+  refreshTokenMasked: '',
+  folderId: '',
+  scheduleHour: 2,
+  retentionDays: 7,
+  lastBackupAt: '',
+  lastStatus: '',
+  lastError: '',
+  updatedAt: '',
+};
+
 function actionBadgeClass(action: string): string {
   const normalized = action.trim().toUpperCase();
   if (normalized === 'ARCHIVE' || normalized === 'REMOVE') {
@@ -129,6 +171,27 @@ function normalizeTimeout(value: number): number {
   if (value < 3) return 3;
   if (value > 120) return 120;
   return Math.round(value);
+}
+
+function normalizeScheduleHour(value: number): number {
+  if (!Number.isFinite(value)) return 2;
+  if (value < 0) return 0;
+  if (value > 23) return 23;
+  return Math.round(value);
+}
+
+function normalizeRetentionDays(value: number): number {
+  if (!Number.isFinite(value)) return 7;
+  if (value < 1) return 7;
+  if (value > 365) return 365;
+  return Math.round(value);
+}
+
+function formatBytes(value?: number): string {
+  if (!value || value <= 0) return '0 B';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(2)} MB`;
 }
 
 export default function AdminHomePage() {
@@ -154,6 +217,14 @@ export default function AdminHomePage() {
   const [r2SecretAccessKeyInput, setR2SecretAccessKeyInput] = useState('');
   const [clearStoredR2Secret, setClearStoredR2Secret] = useState(false);
   const [savingR2Config, setSavingR2Config] = useState(false);
+
+  const [googleDriveBackupConfig, setGoogleDriveBackupConfig] = useState<GoogleDriveBackupConfig>(emptyGoogleDriveBackupConfig);
+  const [googleDriveClientSecretInput, setGoogleDriveClientSecretInput] = useState('');
+  const [googleDriveRefreshTokenInput, setGoogleDriveRefreshTokenInput] = useState('');
+  const [clearStoredGoogleDriveClientSecret, setClearStoredGoogleDriveClientSecret] = useState(false);
+  const [clearStoredGoogleDriveRefreshToken, setClearStoredGoogleDriveRefreshToken] = useState(false);
+  const [savingGoogleDriveBackupConfig, setSavingGoogleDriveBackupConfig] = useState(false);
+  const [runningGoogleDriveBackup, setRunningGoogleDriveBackup] = useState(false);
 
   useEffect(() => {
     const syncUser = (): void => {
@@ -526,6 +597,145 @@ export default function AdminHomePage() {
     }
   }
 
+  async function loadGoogleDriveBackupConfig() {
+    if (!hasAdminAccess(user?.role)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/backups/google-drive`, {
+        headers: authHeaders(readAuthUser()),
+        cache: 'no-store',
+      });
+      const payload = (await res.json().catch(() => ({}))) as GoogleDriveBackupConfig;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi tải cấu hình Google Drive backup: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setGoogleDriveBackupConfig({
+        enabled: Boolean(payload.enabled),
+        clientId: typeof payload.clientId === 'string' ? payload.clientId : '',
+        hasClientSecret: Boolean(payload.hasClientSecret),
+        clientSecretMasked: typeof payload.clientSecretMasked === 'string' ? payload.clientSecretMasked : '',
+        hasRefreshToken: Boolean(payload.hasRefreshToken),
+        refreshTokenMasked: typeof payload.refreshTokenMasked === 'string' ? payload.refreshTokenMasked : '',
+        folderId: typeof payload.folderId === 'string' ? payload.folderId : '',
+        scheduleHour: normalizeScheduleHour(Number(payload.scheduleHour)),
+        retentionDays: normalizeRetentionDays(Number(payload.retentionDays)),
+        lastBackupAt: typeof payload.lastBackupAt === 'string' ? payload.lastBackupAt : '',
+        lastStatus: typeof payload.lastStatus === 'string' ? payload.lastStatus : '',
+        lastError: typeof payload.lastError === 'string' ? payload.lastError : '',
+        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
+      });
+      setGoogleDriveClientSecretInput('');
+      setGoogleDriveRefreshTokenInput('');
+      setClearStoredGoogleDriveClientSecret(false);
+      setClearStoredGoogleDriveRefreshToken(false);
+    } catch {
+      setMessage('Không thể tải cấu hình Google Drive backup.');
+    }
+  }
+
+  async function saveGoogleDriveBackupConfig() {
+    if (!hasAdminAccess(user?.role) || savingGoogleDriveBackupConfig) {
+      return;
+    }
+
+    setSavingGoogleDriveBackupConfig(true);
+    try {
+      const body: Record<string, unknown> = {
+        enabled: Boolean(googleDriveBackupConfig.enabled),
+        clientId: googleDriveBackupConfig.clientId.trim(),
+        folderId: googleDriveBackupConfig.folderId.trim(),
+        scheduleHour: normalizeScheduleHour(googleDriveBackupConfig.scheduleHour),
+        retentionDays: normalizeRetentionDays(googleDriveBackupConfig.retentionDays),
+      };
+
+      if (clearStoredGoogleDriveClientSecret) {
+        body.clientSecret = '';
+      } else if (googleDriveClientSecretInput.trim() !== '') {
+        body.clientSecret = googleDriveClientSecretInput.trim();
+      }
+      if (clearStoredGoogleDriveRefreshToken) {
+        body.refreshToken = '';
+      } else if (googleDriveRefreshTokenInput.trim() !== '') {
+        body.refreshToken = googleDriveRefreshTokenInput.trim();
+      }
+
+      const res = await fetch(`${API_BASE}/admin/backups/google-drive`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          ...authHeaders(readAuthUser()),
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = (await res.json().catch(() => ({}))) as GoogleDriveBackupConfig;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi lưu cấu hình Google Drive backup: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setGoogleDriveBackupConfig({
+        enabled: Boolean(payload.enabled),
+        clientId: typeof payload.clientId === 'string' ? payload.clientId : '',
+        hasClientSecret: Boolean(payload.hasClientSecret),
+        clientSecretMasked: typeof payload.clientSecretMasked === 'string' ? payload.clientSecretMasked : '',
+        hasRefreshToken: Boolean(payload.hasRefreshToken),
+        refreshTokenMasked: typeof payload.refreshTokenMasked === 'string' ? payload.refreshTokenMasked : '',
+        folderId: typeof payload.folderId === 'string' ? payload.folderId : '',
+        scheduleHour: normalizeScheduleHour(Number(payload.scheduleHour)),
+        retentionDays: normalizeRetentionDays(Number(payload.retentionDays)),
+        lastBackupAt: typeof payload.lastBackupAt === 'string' ? payload.lastBackupAt : '',
+        lastStatus: typeof payload.lastStatus === 'string' ? payload.lastStatus : '',
+        lastError: typeof payload.lastError === 'string' ? payload.lastError : '',
+        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
+      });
+      setGoogleDriveClientSecretInput('');
+      setGoogleDriveRefreshTokenInput('');
+      setClearStoredGoogleDriveClientSecret(false);
+      setClearStoredGoogleDriveRefreshToken(false);
+      setMessage('Đã cập nhật cấu hình sao lưu SQLite lên Google Drive.');
+    } catch {
+      setMessage('Không thể lưu cấu hình Google Drive backup.');
+    } finally {
+      setSavingGoogleDriveBackupConfig(false);
+    }
+  }
+
+  async function runGoogleDriveBackupNow() {
+    if (!hasAdminAccess(user?.role) || runningGoogleDriveBackup) {
+      return;
+    }
+
+    setRunningGoogleDriveBackup(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/backups/google-drive`, {
+        method: 'POST',
+        headers: authHeaders(readAuthUser()),
+      });
+      const payload = (await res.json().catch(() => ({}))) as GoogleDriveBackupRunResult;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi chạy backup Google Drive: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setMessage(`Đã sao lưu ${payload.fileName ?? 'SQLite'} (${formatBytes(payload.sizeBytes)}) lên Google Drive.`);
+      void loadGoogleDriveBackupConfig();
+    } catch {
+      setMessage('Không thể chạy backup Google Drive.');
+    } finally {
+      setRunningGoogleDriveBackup(false);
+    }
+  }
+
   useEffect(() => {
     if (hydrated && hasAdminAccess(user?.role)) {
       void loadDashboard();
@@ -533,12 +743,18 @@ export default function AdminHomePage() {
       void loadGlobalGoogleTagConfig();
       void loadModerationAIConfig();
       void loadR2StorageConfig();
+      void loadGoogleDriveBackupConfig();
     }
   }, [hydrated, user?.role]);
 
   const roleLabel = useMemo(() => (user?.role ?? '').toUpperCase(), [user?.role]);
   const aiReady = aiConfig.enabled && aiConfig.endpoint.trim() !== '' && aiConfig.hasApiKey;
   const r2Ready = r2Config.enabled && r2Config.accountId.trim() !== '' && r2Config.accessKeyId.trim() !== '' && r2Config.hasSecretAccessKey && r2Config.bucketName.trim() !== '';
+  const googleDriveBackupReady =
+    googleDriveBackupConfig.enabled &&
+    googleDriveBackupConfig.clientId.trim() !== '' &&
+    googleDriveBackupConfig.hasClientSecret &&
+    googleDriveBackupConfig.hasRefreshToken;
 
   if (!hydrated) {
     return (
@@ -621,6 +837,7 @@ export default function AdminHomePage() {
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Model: {aiConfig.model || 'gpt-4o-mini'}</span>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Timeout: {normalizeTimeout(aiConfig.timeoutSeconds)}s</span>
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${r2Ready ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{r2Ready ? 'R2 Storage: Ready' : r2Config.enabled ? 'R2 thiếu cấu hình' : 'R2 đang tắt'}</span>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${googleDriveBackupReady ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{googleDriveBackupReady ? 'Google Drive backup: Ready' : googleDriveBackupConfig.enabled ? 'Google Drive backup thiếu cấu hình' : 'Google Drive backup đang tắt'}</span>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               <Link href="/admin/listings" className="rounded-lg bg-slate-900 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-slate-800">
@@ -939,6 +1156,158 @@ export default function AdminHomePage() {
           <div className="mt-2 text-xs text-slate-500">
             <p>Secret hiện tại: {r2Config.hasSecretAccessKey ? r2Config.secretAccessKeyMasked : 'chưa cấu hình'}</p>
             <p>Cập nhật gần nhất: {r2Config.updatedAt ? new Date(r2Config.updatedAt).toLocaleString('vi-VN') : 'chưa có'}</p>
+          </div>
+        </article>
+
+        <article className="neo-panel mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Sao lưu SQLite lên Google Drive</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Tự động sao lưu database SQLite hằng ngày lên Google Drive API. Mặc định chạy lúc 02:00 và xóa bản backup cũ hơn 7 ngày.
+          </p>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[220px,1fr,1fr] lg:items-end">
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={Boolean(googleDriveBackupConfig.enabled)}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, enabled: event.target.checked }))}
+              />
+              Bật backup Google Drive
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>OAuth Client ID</span>
+              <input
+                value={googleDriveBackupConfig.clientId}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, clientId: event.target.value }))}
+                placeholder="Google OAuth Client ID"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Google Drive Folder ID</span>
+              <input
+                value={googleDriveBackupConfig.folderId}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, folderId: event.target.value }))}
+                placeholder="Để trống nếu lưu ở My Drive"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-[1fr,1fr] lg:items-end">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>OAuth Client Secret</span>
+              <input
+                type="password"
+                value={googleDriveClientSecretInput}
+                onChange={(event) => {
+                  setGoogleDriveClientSecretInput(event.target.value);
+                  if (event.target.value.trim() !== '') {
+                    setClearStoredGoogleDriveClientSecret(false);
+                  }
+                }}
+                placeholder="Để trống để giữ secret hiện tại"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>OAuth Refresh Token</span>
+              <input
+                type="password"
+                value={googleDriveRefreshTokenInput}
+                onChange={(event) => {
+                  setGoogleDriveRefreshTokenInput(event.target.value);
+                  if (event.target.value.trim() !== '') {
+                    setClearStoredGoogleDriveRefreshToken(false);
+                  }
+                }}
+                placeholder="Để trống để giữ token hiện tại"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-[160px,180px,220px,220px,180px] lg:items-end">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Giờ backup</span>
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={googleDriveBackupConfig.scheduleHour}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, scheduleHour: normalizeScheduleHour(Number(event.target.value)) }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Xóa sau số ngày</span>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={googleDriveBackupConfig.retentionDays}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, retentionDays: normalizeRetentionDays(Number(event.target.value)) }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={clearStoredGoogleDriveClientSecret}
+                onChange={(event) => {
+                  setClearStoredGoogleDriveClientSecret(event.target.checked);
+                  if (event.target.checked) {
+                    setGoogleDriveClientSecretInput('');
+                  }
+                }}
+              />
+              Xóa client secret đã lưu
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={clearStoredGoogleDriveRefreshToken}
+                onChange={(event) => {
+                  setClearStoredGoogleDriveRefreshToken(event.target.checked);
+                  if (event.target.checked) {
+                    setGoogleDriveRefreshTokenInput('');
+                  }
+                }}
+              />
+              Xóa refresh token đã lưu
+            </label>
+            <button
+              type="button"
+              onClick={() => void saveGoogleDriveBackupConfig()}
+              disabled={savingGoogleDriveBackupConfig}
+              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-60"
+            >
+              {savingGoogleDriveBackupConfig ? 'Đang lưu...' : 'Lưu backup'}
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void runGoogleDriveBackupNow()}
+              disabled={runningGoogleDriveBackup || !googleDriveBackupReady}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {runningGoogleDriveBackup ? 'Đang chạy backup...' : 'Chạy backup ngay'}
+            </button>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${googleDriveBackupReady ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+              {googleDriveBackupReady ? 'Đã sẵn sàng' : googleDriveBackupConfig.enabled ? 'Thiếu OAuth secret/token' : 'Đang tắt'}
+            </span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Lịch: {String(normalizeScheduleHour(googleDriveBackupConfig.scheduleHour)).padStart(2, '0')}:00 hằng ngày</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Giữ {normalizeRetentionDays(googleDriveBackupConfig.retentionDays)} ngày</span>
+          </div>
+
+          <div className="mt-2 text-xs text-slate-500">
+            <p>Client secret hiện tại: {googleDriveBackupConfig.hasClientSecret ? googleDriveBackupConfig.clientSecretMasked : 'chưa cấu hình'}</p>
+            <p>Refresh token hiện tại: {googleDriveBackupConfig.hasRefreshToken ? googleDriveBackupConfig.refreshTokenMasked : 'chưa cấu hình'}</p>
+            <p>Lần backup gần nhất: {googleDriveBackupConfig.lastBackupAt ? new Date(googleDriveBackupConfig.lastBackupAt).toLocaleString('vi-VN') : 'chưa có'}</p>
+            <p>Trạng thái gần nhất: {googleDriveBackupConfig.lastStatus || 'chưa có'}{googleDriveBackupConfig.lastError ? ` - ${googleDriveBackupConfig.lastError}` : ''}</p>
+            <p>Cập nhật cấu hình: {googleDriveBackupConfig.updatedAt ? new Date(googleDriveBackupConfig.updatedAt).toLocaleString('vi-VN') : 'chưa có'}</p>
           </div>
         </article>
         {message ? <p className="mt-4 text-sm text-rose-700">{message}</p> : null}
