@@ -78,11 +78,15 @@ type R2StorageConfig = {
 
 type GoogleDriveBackupConfig = {
   enabled: boolean;
+  authMode: 'oauth' | 'service_account';
   clientId: string;
   hasClientSecret: boolean;
   clientSecretMasked: string;
   hasRefreshToken: boolean;
   refreshTokenMasked: string;
+  hasServiceAccountJson: boolean;
+  serviceAccountJsonMasked: string;
+  serviceAccountEmail: string;
   folderId: string;
   scheduleHour: number;
   retentionDays: number;
@@ -138,11 +142,15 @@ const emptyR2StorageConfig: R2StorageConfig = {
 
 const emptyGoogleDriveBackupConfig: GoogleDriveBackupConfig = {
   enabled: false,
+  authMode: 'service_account',
   clientId: '',
   hasClientSecret: false,
   clientSecretMasked: '',
   hasRefreshToken: false,
   refreshTokenMasked: '',
+  hasServiceAccountJson: false,
+  serviceAccountJsonMasked: '',
+  serviceAccountEmail: '',
   folderId: '',
   scheduleHour: 2,
   retentionDays: 7,
@@ -187,6 +195,10 @@ function normalizeRetentionDays(value: number): number {
   return Math.round(value);
 }
 
+function normalizeGoogleDriveAuthMode(value: unknown): 'oauth' | 'service_account' {
+  return value === 'oauth' ? 'oauth' : 'service_account';
+}
+
 function formatBytes(value?: number): string {
   if (!value || value <= 0) return '0 B';
   if (value < 1024) return `${value} B`;
@@ -221,8 +233,10 @@ export default function AdminHomePage() {
   const [googleDriveBackupConfig, setGoogleDriveBackupConfig] = useState<GoogleDriveBackupConfig>(emptyGoogleDriveBackupConfig);
   const [googleDriveClientSecretInput, setGoogleDriveClientSecretInput] = useState('');
   const [googleDriveRefreshTokenInput, setGoogleDriveRefreshTokenInput] = useState('');
+  const [googleDriveServiceAccountInput, setGoogleDriveServiceAccountInput] = useState('');
   const [clearStoredGoogleDriveClientSecret, setClearStoredGoogleDriveClientSecret] = useState(false);
   const [clearStoredGoogleDriveRefreshToken, setClearStoredGoogleDriveRefreshToken] = useState(false);
+  const [clearStoredGoogleDriveServiceAccount, setClearStoredGoogleDriveServiceAccount] = useState(false);
   const [savingGoogleDriveBackupConfig, setSavingGoogleDriveBackupConfig] = useState(false);
   const [runningGoogleDriveBackup, setRunningGoogleDriveBackup] = useState(false);
 
@@ -617,11 +631,15 @@ export default function AdminHomePage() {
       }
       setGoogleDriveBackupConfig({
         enabled: Boolean(payload.enabled),
+        authMode: normalizeGoogleDriveAuthMode(payload.authMode),
         clientId: typeof payload.clientId === 'string' ? payload.clientId : '',
         hasClientSecret: Boolean(payload.hasClientSecret),
         clientSecretMasked: typeof payload.clientSecretMasked === 'string' ? payload.clientSecretMasked : '',
         hasRefreshToken: Boolean(payload.hasRefreshToken),
         refreshTokenMasked: typeof payload.refreshTokenMasked === 'string' ? payload.refreshTokenMasked : '',
+        hasServiceAccountJson: Boolean(payload.hasServiceAccountJson),
+        serviceAccountJsonMasked: typeof payload.serviceAccountJsonMasked === 'string' ? payload.serviceAccountJsonMasked : '',
+        serviceAccountEmail: typeof payload.serviceAccountEmail === 'string' ? payload.serviceAccountEmail : '',
         folderId: typeof payload.folderId === 'string' ? payload.folderId : '',
         scheduleHour: normalizeScheduleHour(Number(payload.scheduleHour)),
         retentionDays: normalizeRetentionDays(Number(payload.retentionDays)),
@@ -632,8 +650,10 @@ export default function AdminHomePage() {
       });
       setGoogleDriveClientSecretInput('');
       setGoogleDriveRefreshTokenInput('');
+      setGoogleDriveServiceAccountInput('');
       setClearStoredGoogleDriveClientSecret(false);
       setClearStoredGoogleDriveRefreshToken(false);
+      setClearStoredGoogleDriveServiceAccount(false);
     } catch {
       setMessage('Không thể tải cấu hình Google Drive backup.');
     }
@@ -648,6 +668,7 @@ export default function AdminHomePage() {
     try {
       const body: Record<string, unknown> = {
         enabled: Boolean(googleDriveBackupConfig.enabled),
+        authMode: googleDriveBackupConfig.authMode,
         clientId: googleDriveBackupConfig.clientId.trim(),
         folderId: googleDriveBackupConfig.folderId.trim(),
         scheduleHour: normalizeScheduleHour(googleDriveBackupConfig.scheduleHour),
@@ -663,6 +684,11 @@ export default function AdminHomePage() {
         body.refreshToken = '';
       } else if (googleDriveRefreshTokenInput.trim() !== '') {
         body.refreshToken = googleDriveRefreshTokenInput.trim();
+      }
+      if (clearStoredGoogleDriveServiceAccount) {
+        body.serviceAccountJson = '';
+      } else if (googleDriveServiceAccountInput.trim() !== '') {
+        body.serviceAccountJson = googleDriveServiceAccountInput.trim();
       }
 
       const res = await fetch(`${API_BASE}/admin/backups/google-drive`, {
@@ -683,11 +709,15 @@ export default function AdminHomePage() {
       }
       setGoogleDriveBackupConfig({
         enabled: Boolean(payload.enabled),
+        authMode: normalizeGoogleDriveAuthMode(payload.authMode),
         clientId: typeof payload.clientId === 'string' ? payload.clientId : '',
         hasClientSecret: Boolean(payload.hasClientSecret),
         clientSecretMasked: typeof payload.clientSecretMasked === 'string' ? payload.clientSecretMasked : '',
         hasRefreshToken: Boolean(payload.hasRefreshToken),
         refreshTokenMasked: typeof payload.refreshTokenMasked === 'string' ? payload.refreshTokenMasked : '',
+        hasServiceAccountJson: Boolean(payload.hasServiceAccountJson),
+        serviceAccountJsonMasked: typeof payload.serviceAccountJsonMasked === 'string' ? payload.serviceAccountJsonMasked : '',
+        serviceAccountEmail: typeof payload.serviceAccountEmail === 'string' ? payload.serviceAccountEmail : '',
         folderId: typeof payload.folderId === 'string' ? payload.folderId : '',
         scheduleHour: normalizeScheduleHour(Number(payload.scheduleHour)),
         retentionDays: normalizeRetentionDays(Number(payload.retentionDays)),
@@ -698,8 +728,10 @@ export default function AdminHomePage() {
       });
       setGoogleDriveClientSecretInput('');
       setGoogleDriveRefreshTokenInput('');
+      setGoogleDriveServiceAccountInput('');
       setClearStoredGoogleDriveClientSecret(false);
       setClearStoredGoogleDriveRefreshToken(false);
+      setClearStoredGoogleDriveServiceAccount(false);
       setMessage('Đã cập nhật cấu hình sao lưu SQLite lên Google Drive.');
     } catch {
       setMessage('Không thể lưu cấu hình Google Drive backup.');
@@ -752,9 +784,9 @@ export default function AdminHomePage() {
   const r2Ready = r2Config.enabled && r2Config.accountId.trim() !== '' && r2Config.accessKeyId.trim() !== '' && r2Config.hasSecretAccessKey && r2Config.bucketName.trim() !== '';
   const googleDriveBackupReady =
     googleDriveBackupConfig.enabled &&
-    googleDriveBackupConfig.clientId.trim() !== '' &&
-    googleDriveBackupConfig.hasClientSecret &&
-    googleDriveBackupConfig.hasRefreshToken;
+    (googleDriveBackupConfig.authMode === 'service_account'
+      ? googleDriveBackupConfig.hasServiceAccountJson
+      : googleDriveBackupConfig.clientId.trim() !== '' && googleDriveBackupConfig.hasClientSecret && googleDriveBackupConfig.hasRefreshToken);
 
   if (!hydrated) {
     return (
@@ -793,6 +825,7 @@ export default function AdminHomePage() {
                 void loadGlobalGoogleTagConfig();
                 void loadModerationAIConfig();
                 void loadR2StorageConfig();
+                void loadGoogleDriveBackupConfig();
               }}
               className="rounded-full border border-white/30 px-3 py-1 hover:bg-white/10"
             >
@@ -1162,10 +1195,10 @@ export default function AdminHomePage() {
         <article className="neo-panel mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Sao lưu SQLite lên Google Drive</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Tự động sao lưu database SQLite hằng ngày lên Google Drive API. Mặc định chạy lúc 02:00 và xóa bản backup cũ hơn 7 ngày.
+            Tự động sao lưu database SQLite hằng ngày lên Google Drive API. Khuyến nghị dùng Service Account, mặc định chạy lúc 02:00 và xóa bản backup cũ hơn 7 ngày.
           </p>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[220px,1fr,1fr] lg:items-end">
+          <div className="mt-4 grid gap-3 lg:grid-cols-[220px,220px,1fr] lg:items-end">
             <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <input
                 type="checkbox"
@@ -1175,26 +1208,70 @@ export default function AdminHomePage() {
               Bật backup Google Drive
             </label>
             <label className="flex flex-col gap-1 text-sm text-slate-700">
-              <span>OAuth Client ID</span>
-              <input
-                value={googleDriveBackupConfig.clientId}
-                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, clientId: event.target.value }))}
-                placeholder="Google OAuth Client ID"
+              <span>Kiểu xác thực</span>
+              <select
+                value={googleDriveBackupConfig.authMode}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, authMode: normalizeGoogleDriveAuthMode(event.target.value) }))}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
+              >
+                <option value="service_account">Service Account</option>
+                <option value="oauth">OAuth Refresh Token</option>
+              </select>
             </label>
             <label className="flex flex-col gap-1 text-sm text-slate-700">
               <span>Google Drive Folder ID</span>
               <input
                 value={googleDriveBackupConfig.folderId}
                 onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, folderId: event.target.value }))}
-                placeholder="Để trống nếu lưu ở My Drive"
+                placeholder="Folder ID đã share cho Service Account"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
           </div>
 
-          <div className="mt-3 grid gap-3 lg:grid-cols-[1fr,1fr] lg:items-end">
+          {googleDriveBackupConfig.authMode === 'service_account' ? (
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1fr,260px] lg:items-end">
+              <label className="flex flex-col gap-1 text-sm text-slate-700">
+                <span>Service Account JSON</span>
+                <textarea
+                  value={googleDriveServiceAccountInput}
+                  onChange={(event) => {
+                    setGoogleDriveServiceAccountInput(event.target.value);
+                    if (event.target.value.trim() !== '') {
+                      setClearStoredGoogleDriveServiceAccount(false);
+                    }
+                  }}
+                  placeholder="Dán toàn bộ JSON key tải từ Google Cloud. Để trống để giữ cấu hình hiện tại."
+                  rows={6}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
+                />
+              </label>
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={clearStoredGoogleDriveServiceAccount}
+                  onChange={(event) => {
+                    setClearStoredGoogleDriveServiceAccount(event.target.checked);
+                    if (event.target.checked) {
+                      setGoogleDriveServiceAccountInput('');
+                    }
+                  }}
+                />
+                Xóa Service Account JSON đã lưu
+              </label>
+            </div>
+          ) : (
+            <>
+              <div className="mt-3 grid gap-3 lg:grid-cols-[1fr,1fr] lg:items-end">
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
+                  <span>OAuth Client ID</span>
+                  <input
+                    value={googleDriveBackupConfig.clientId}
+                    onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, clientId: event.target.value }))}
+                    placeholder="Google OAuth Client ID"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
             <label className="flex flex-col gap-1 text-sm text-slate-700">
               <span>OAuth Client Secret</span>
               <input
@@ -1210,6 +1287,8 @@ export default function AdminHomePage() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
+              </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-[1fr,220px,220px] lg:items-end">
             <label className="flex flex-col gap-1 text-sm text-slate-700">
               <span>OAuth Refresh Token</span>
               <input
@@ -1222,31 +1301,6 @@ export default function AdminHomePage() {
                   }
                 }}
                 placeholder="Để trống để giữ token hiện tại"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-          </div>
-
-          <div className="mt-3 grid gap-3 lg:grid-cols-[160px,180px,220px,220px,180px] lg:items-end">
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
-              <span>Giờ backup</span>
-              <input
-                type="number"
-                min={0}
-                max={23}
-                value={googleDriveBackupConfig.scheduleHour}
-                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, scheduleHour: normalizeScheduleHour(Number(event.target.value)) }))}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
-              <span>Xóa sau số ngày</span>
-              <input
-                type="number"
-                min={1}
-                max={365}
-                value={googleDriveBackupConfig.retentionDays}
-                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, retentionDays: normalizeRetentionDays(Number(event.target.value)) }))}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
@@ -1276,6 +1330,33 @@ export default function AdminHomePage() {
               />
               Xóa refresh token đã lưu
             </label>
+          </div>
+            </>
+          )}
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-[160px,180px,180px] lg:items-end">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Giờ backup</span>
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={googleDriveBackupConfig.scheduleHour}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, scheduleHour: normalizeScheduleHour(Number(event.target.value)) }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Xóa sau số ngày</span>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={googleDriveBackupConfig.retentionDays}
+                onChange={(event) => setGoogleDriveBackupConfig((prev) => ({ ...prev, retentionDays: normalizeRetentionDays(Number(event.target.value)) }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
             <button
               type="button"
               onClick={() => void saveGoogleDriveBackupConfig()}
@@ -1296,13 +1377,21 @@ export default function AdminHomePage() {
               {runningGoogleDriveBackup ? 'Đang chạy backup...' : 'Chạy backup ngay'}
             </button>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${googleDriveBackupReady ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-              {googleDriveBackupReady ? 'Đã sẵn sàng' : googleDriveBackupConfig.enabled ? 'Thiếu OAuth secret/token' : 'Đang tắt'}
+              {googleDriveBackupReady
+                ? 'Đã sẵn sàng'
+                : googleDriveBackupConfig.enabled
+                  ? googleDriveBackupConfig.authMode === 'service_account'
+                    ? 'Thiếu Service Account JSON'
+                    : 'Thiếu OAuth secret/token'
+                  : 'Đang tắt'}
             </span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Lịch: {String(normalizeScheduleHour(googleDriveBackupConfig.scheduleHour)).padStart(2, '0')}:00 hằng ngày</span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Giữ {normalizeRetentionDays(googleDriveBackupConfig.retentionDays)} ngày</span>
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
+            <p>Kiểu xác thực: {googleDriveBackupConfig.authMode === 'service_account' ? 'Service Account' : 'OAuth Refresh Token'}</p>
+            <p>Service Account hiện tại: {googleDriveBackupConfig.hasServiceAccountJson ? `${googleDriveBackupConfig.serviceAccountEmail || googleDriveBackupConfig.serviceAccountJsonMasked}` : 'chưa cấu hình'}</p>
             <p>Client secret hiện tại: {googleDriveBackupConfig.hasClientSecret ? googleDriveBackupConfig.clientSecretMasked : 'chưa cấu hình'}</p>
             <p>Refresh token hiện tại: {googleDriveBackupConfig.hasRefreshToken ? googleDriveBackupConfig.refreshTokenMasked : 'chưa cấu hình'}</p>
             <p>Lần backup gần nhất: {googleDriveBackupConfig.lastBackupAt ? new Date(googleDriveBackupConfig.lastBackupAt).toLocaleString('vi-VN') : 'chưa có'}</p>
