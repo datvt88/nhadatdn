@@ -21,8 +21,9 @@ export async function generateMetadata({
 }: {
   searchParams?: { page?: string };
 }): Promise<Metadata> {
+  const homepageTitle = 'Mua bán nhà đất Đà Nẵng | Kết nối chính chủ, có sổ đỏ';
   return {
-    title: 'Mua bán nhà đất Đà Nẵng',
+    title: homepageTitle,
     description:
       'Mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng cáº­p nháº­t liÃªn tá»¥c: lá»c theo phÆ°á»ng/xÃ£, giÃ¡, diá»‡n tÃ­ch, loáº¡i hÃ¬nh vÃ  xem tin má»›i nháº¥t theo thá»i gian thá»±c.',
     keywords: [
@@ -34,7 +35,7 @@ export async function generateMetadata({
       'nhÃ  Ä‘áº¥t SÆ¡n TrÃ ',
     ],
     openGraph: {
-      title: 'Mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng',
+      title: homepageTitle,
       description:
         'TÃ¬m nhanh nhÃ  Ä‘áº¥t ÄÃ  Náºµng theo phÆ°á»ng/xÃ£ má»›i nháº¥t, giÃ¡, diá»‡n tÃ­ch vÃ  loáº¡i hÃ¬nh. Dá»¯ liá»‡u cáº­p nháº­t realtime.',
       url: toAbsoluteUrl('/'),
@@ -43,7 +44,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'Mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng',
+      title: homepageTitle,
       description:
         'TÃ¬m nhanh nhÃ  Ä‘áº¥t ÄÃ  Náºµng theo phÆ°á»ng/xÃ£ má»›i nháº¥t, giÃ¡, diá»‡n tÃ­ch vÃ  loáº¡i hÃ¬nh. Dá»¯ liá»‡u cáº­p nháº­t realtime.',
       images: [toAbsoluteUrl('/logo-nhadatdn.svg')],
