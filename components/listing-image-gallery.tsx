@@ -12,7 +12,6 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
   const normalized = useMemo(() => images.filter((src) => typeof src === 'string' && src.trim() !== ''), [images]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
-  const [singleView, setSingleView] = useState(false);
   const [failedMap, setFailedMap] = useState<Record<string, true>>({});
 
   const markFailed = useCallback((src: string) => {
@@ -25,7 +24,6 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
 
   useEffect(() => {
     setActiveIndex(0);
-    setSingleView(false);
     setZoomOpen(false);
     setFailedMap({});
   }, [images]);
@@ -74,76 +72,38 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
 
   return (
     <>
-      {singleView ? (
-        <div className="overflow-hidden rounded-xl border border-slate-100">
-          <button type="button" className="relative block min-h-[230px] w-full overflow-hidden sm:min-h-[480px]" onClick={() => setZoomOpen(true)} aria-label="Mở ảnh lớn">
-            <Image
-              src={mainImage}
-              alt={title}
-              fill
-              className="object-cover"
-              sizes="(max-width: 640px) 100vw, 80vw"
-              unoptimized
-              onError={() => markFailed(mainImage)}
-            />
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-4 gap-1 overflow-hidden rounded-xl border border-slate-100">
-          <button
-            type="button"
-            className="relative col-span-3 row-span-3 min-h-[230px] overflow-hidden sm:min-h-[360px]"
-            onClick={() => setZoomOpen(true)}
-            aria-label="Mở ảnh lớn"
-          >
-            <Image
-              src={mainImage}
-              alt={title}
-              fill
-              className="object-cover"
-              sizes="(max-width: 640px) 75vw, (max-width: 1024px) 66vw, 60vw"
-              unoptimized
-              onError={() => markFailed(mainImage)}
-            />
-          </button>
+      <div className="overflow-hidden rounded-xl border border-slate-100 bg-slate-100">
+        <button
+          type="button"
+          className="relative block aspect-[4/3] w-full overflow-hidden sm:aspect-[16/10]"
+          onClick={() => setZoomOpen(true)}
+          aria-label="Mở ảnh lớn"
+        >
+          <Image
+            src={mainImage}
+            alt={title}
+            fill
+            className="object-cover"
+            sizes="(max-width: 640px) 100vw, 80vw"
+            priority
+            fetchPriority="high"
+            unoptimized
+            onError={() => markFailed(mainImage)}
+          />
+        </button>
+      </div>
 
-          {[0, 1, 2, 3].map((offset) => {
-            const index = (activeIndex + offset + 1) % safeImages.length;
-            const src = safeImages[index] ?? mainImage;
-            return (
-              <button
-                key={`${src}-${index}`}
-                type="button"
-                onClick={() => setActiveIndex(index)}
-                className="relative h-[76px] overflow-hidden sm:h-[118px]"
-                aria-label={`Chọn ảnh ${index + 1}`}
-              >
-                <Image
-                  src={src}
-                  alt={`${title} ${index + 1}`}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 25vw, 140px"
-                  unoptimized
-                  onError={() => markFailed(src)}
-                />
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
         {safeImages.map((src, index) => (
           <button
             key={`${src}-${index}-thumb`}
             type="button"
-            onClick={() => {
-              setActiveIndex(index);
-              setSingleView(true);
-            }}
-            className={`relative h-16 overflow-hidden rounded border ${activeIndex === index ? 'border-[var(--brand-primary)]' : 'border-slate-200'}`}
+            onClick={() => setActiveIndex(index)}
+            className={`relative h-16 w-28 shrink-0 overflow-hidden rounded border bg-slate-100 transition sm:w-32 ${
+              activeIndex === index ? 'border-[var(--brand-primary)] ring-1 ring-[var(--brand-primary)]' : 'border-slate-200'
+            }`}
             aria-label={`Ảnh thu nhỏ ${index + 1}`}
+            aria-pressed={activeIndex === index}
           >
             <Image
               src={src}
