@@ -1006,7 +1006,7 @@ export default function PostListingDanangPage() {
                     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {uploadedImages.map((image) => (
                         <div key={image.url} className="relative rounded border border-slate-200 p-1">
-                          <div className="relative h-20 w-full"><Image src={image.url} alt="uploaded" fill className="rounded object-cover" sizes="120px" /></div>
+                          <div className="relative h-20 w-full"><Image src={image.url} alt="uploaded" fill className="rounded object-cover" sizes="120px" unoptimized /></div>
                           <button type="button" className="mt-1 w-full rounded bg-slate-100 px-2 py-1 text-xs" onClick={() => removeImage(image.url)}>Xóa</button>
                         </div>
                       ))}

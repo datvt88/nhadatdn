@@ -83,6 +83,7 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
               fill
               className="object-cover"
               sizes="(max-width: 640px) 100vw, 80vw"
+              unoptimized
               onError={() => markFailed(mainImage)}
             />
           </button>
@@ -101,6 +102,7 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
               fill
               className="object-cover"
               sizes="(max-width: 640px) 75vw, (max-width: 1024px) 66vw, 60vw"
+              unoptimized
               onError={() => markFailed(mainImage)}
             />
           </button>
@@ -122,6 +124,7 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
                   fill
                   className="object-cover"
                   sizes="(max-width: 640px) 25vw, 140px"
+                  unoptimized
                   onError={() => markFailed(src)}
                 />
               </button>
@@ -148,6 +151,7 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
               fill
               className="object-cover"
               sizes="96px"
+              unoptimized
               onError={() => markFailed(src)}
             />
           </button>

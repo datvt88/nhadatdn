@@ -112,6 +112,7 @@ export function ListingCard({
               priority={priorityImage}
               loading={priorityImage ? 'eager' : 'lazy'}
               fetchPriority={priorityImage ? 'high' : 'low'}
+              unoptimized
               onError={() => markFailed(mainImage)}
             />
           </Link>
@@ -130,6 +131,7 @@ export function ListingCard({
                 sizes="(max-width: 640px) 20vw, 120px"
                 loading="lazy"
                 fetchPriority="low"
+                unoptimized
                 onError={() => markFailed(src)}
               />
             </Link>
@@ -150,6 +152,7 @@ export function ListingCard({
               priority={priorityImage}
               loading={priorityImage ? 'eager' : 'lazy'}
               fetchPriority={priorityImage ? 'high' : 'low'}
+              unoptimized
               onError={() => markFailed(mainImage)}
             />
           </Link>
