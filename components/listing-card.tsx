@@ -59,6 +59,7 @@ export function ListingCard({
   const primaryImageUrl = mainImage ? toAbsoluteUrl(mainImage) : '';
   const sellerUserId = Number(listing.userId ?? 0);
   const posterName = String(listing.posterName ?? '').trim();
+  const posterAvatarUrl = String(listing.posterAvatarUrl ?? '').trim();
   const sellerPath = sellerUserId > 0 ? `/nguoi-dang/${sellerUserId}` : '';
 
   const hasImage = mainImage.trim().length > 0;
@@ -188,11 +189,16 @@ export function ListingCard({
         <p className="line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-slate-600">{preview}</p>
         <p className="line-clamp-1 text-sm text-slate-600">Địa chỉ: {location || 'Đang cập nhật'}</p>
         {sellerPath && posterName ? (
-          <p className="line-clamp-1 text-sm text-slate-600">
-            Người đăng:{' '}
-            <Link href={sellerPath as Route} className="font-semibold text-[var(--brand-primary-hover)] hover:underline">
-              {posterName}
-            </Link>
+          <p className="flex min-w-0 items-center gap-2 text-sm text-slate-600">
+            {posterAvatarUrl ? (
+              <img src={posterAvatarUrl} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" loading="lazy" decoding="async" />
+            ) : null}
+            <span className="min-w-0 truncate">
+              Người đăng:{' '}
+              <Link href={sellerPath as Route} className="font-semibold text-[var(--brand-primary-hover)] hover:underline">
+                {posterName}
+              </Link>
+            </span>
           </p>
         ) : null}
 

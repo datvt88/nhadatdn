@@ -233,6 +233,8 @@ export default function AccountHomePage() {
   const [googleTrackingKey, setGoogleTrackingKey] = useState('');
   const [facebookTrackingKey, setFacebookTrackingKey] = useState('');
   const [profileBio, setProfileBio] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [editingDraft, setEditingDraft] = useState<EditListingDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -242,6 +244,7 @@ export default function AccountHomePage() {
   const [editAddressSuggestions, setEditAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [editAddressLoading, setEditAddressLoading] = useState(false);
   const [danangCatalog, setDanangCatalog] = useState<DanangCatalog | null>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -298,7 +301,7 @@ export default function AccountHomePage() {
       credentials: 'include',
       headers: authHeaders(currentUser),
     });
-    const payload = (await res.json().catch(() => ({}))) as { fullName?: string; contactPhone?: string; phoneVerified?: boolean; googleTrackingKey?: string; facebookTrackingKey?: string; bio?: string; error?: string };
+    const payload = (await res.json().catch(() => ({}))) as { fullName?: string; contactPhone?: string; phoneVerified?: boolean; googleTrackingKey?: string; facebookTrackingKey?: string; bio?: string; avatarUrl?: string; error?: string };
     if (!res.ok) {
       if (isExpiredSessionError(payload.error)) {
         writeAuthUser(null);
@@ -318,8 +321,9 @@ export default function AccountHomePage() {
     setGoogleTrackingKey(payload.googleTrackingKey ?? '');
     setFacebookTrackingKey(payload.facebookTrackingKey ?? '');
     setProfileBio(payload.bio ?? '');
-    if (currentUser.fullName !== resolvedFullName || currentUser.phone !== resolvedPhone || Boolean(currentUser.phoneVerified) !== resolvedPhoneVerified) {
-      const nextUser: AuthUser = { ...currentUser, fullName: resolvedFullName, phone: resolvedPhone, phoneVerified: resolvedPhoneVerified };
+    setAvatarUrl(payload.avatarUrl ?? currentUser.avatarUrl ?? '');
+    if (currentUser.fullName !== resolvedFullName || currentUser.phone !== resolvedPhone || Boolean(currentUser.phoneVerified) !== resolvedPhoneVerified || (currentUser.avatarUrl ?? '') !== (payload.avatarUrl ?? '')) {
+      const nextUser: AuthUser = { ...currentUser, fullName: resolvedFullName, phone: resolvedPhone, phoneVerified: resolvedPhoneVerified, avatarUrl: payload.avatarUrl ?? currentUser.avatarUrl };
       writeAuthUser(nextUser);
       setUser(nextUser);
     }
@@ -479,6 +483,44 @@ export default function AccountHomePage() {
     setUser(nextUser);
     setPhoneVerified(false);
     setMessage('Đã lưu thông tin tài khoản thành công.');
+  }
+
+  async function uploadAvatar(file: File) {
+    if (!user) return;
+    if (!file.type.startsWith('image/')) {
+      setMessage('Vui lòng chọn file ảnh để làm avatar.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage('Ảnh đại diện tối đa 5MB.');
+      return;
+    }
+    const form = new FormData();
+    form.append('avatar', file);
+    setAvatarUploading(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/${user.id}/avatar`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: authHeaders(user),
+        body: form,
+      });
+      const payload = (await res.json().catch(() => ({}))) as { avatarUrl?: string; error?: string };
+      if (!res.ok || !payload.avatarUrl) {
+        setMessage(`Lỗi upload avatar: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      const nextUser: AuthUser = { ...user, avatarUrl: payload.avatarUrl };
+      setAvatarUrl(payload.avatarUrl);
+      writeAuthUser(nextUser);
+      setUser(nextUser);
+      setMessage('Đã cập nhật ảnh đại diện.');
+    } finally {
+      setAvatarUploading(false);
+      if (avatarFileInputRef.current) {
+        avatarFileInputRef.current.value = '';
+      }
+    }
   }
   const filteredMyListings = useMemo(() => {
     return myListings.filter((item) => {
@@ -939,6 +981,47 @@ export default function AccountHomePage() {
                 <dd className="mt-1 text-sm font-medium text-slate-900">{user.id}</dd>
               </div>
             </dl>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <label className="mb-2 block text-xs uppercase tracking-wide text-slate-500">Ảnh đại diện trang bio</label>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-xl font-semibold text-slate-500">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={`Ảnh đại diện ${fullName || user.fullName}`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <span aria-hidden="true">{(fullName || user.fullName || user.email || 'N').trim().charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <input
+                    ref={avatarFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadAvatar(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => avatarFileInputRef.current?.click()}
+                    disabled={avatarUploading}
+                  >
+                    {avatarUploading ? 'Đang upload...' : avatarUrl ? 'Đổi ảnh đại diện' : 'Upload ảnh đại diện'}
+                  </button>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Nếu đăng nhập bằng Google, hệ thống tự dùng ảnh Google khi bạn chưa upload avatar riêng. Ảnh upload sẽ được tối ưu 512px để hiển thị nhanh trên card và trang bio.
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <label className="mb-1 block text-xs uppercase tracking-wide text-slate-500">Số điện thoại (Zalo)</label>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

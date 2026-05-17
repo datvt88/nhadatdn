@@ -17,6 +17,7 @@ type PublicUserBio = {
   userId: number;
   fullName: string;
   bio: string;
+  avatarUrl?: string;
   phoneVerified: boolean;
   accountCreatedAt: string;
   stats: {
@@ -67,7 +68,13 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'website' },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: 'website',
+      ...(bio.avatarUrl ? { images: [{ url: bio.avatarUrl, width: 512, height: 512, alt: bio.fullName }] } : {}),
+    },
     twitter: { card: 'summary', title, description },
   };
 }
@@ -103,9 +110,19 @@ export default async function PosterBioPage({
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
-              <div className="inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--brand-primary)] text-lg font-bold text-white">
-                {initials}
-              </div>
+              {bio.avatarUrl ? (
+                <img
+                  src={bio.avatarUrl}
+                  alt={`Ảnh đại diện ${bio.fullName}`}
+                  className="h-20 w-20 shrink-0 rounded-full border border-slate-200 object-cover shadow-sm"
+                  loading="eager"
+                  decoding="async"
+                />
+              ) : (
+                <div className="inline-flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[var(--brand-primary)] text-xl font-bold text-white">
+                  {initials}
+                </div>
+              )}
               <div>
                 <h1 className="text-2xl font-bold text-slate-950">{bio.fullName}</h1>
                 <p className="mt-1 text-sm text-slate-500">Thành viên từ {formatAccountDate(bio.accountCreatedAt)}</p>

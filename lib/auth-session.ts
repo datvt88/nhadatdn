@@ -9,6 +9,7 @@
   emailVerified?: boolean;
   phoneVerified?: boolean;
   authProvider?: string;
+  avatarUrl?: string;
   createdAt?: string;
   sessionToken?: string;
 };

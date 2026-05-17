@@ -31,6 +31,7 @@ export interface ListingItem {
   updatedAt?: string;
   userId?: number;
   posterName?: string;
+  posterAvatarUrl?: string;
 }
 
 export interface SearchResponse {

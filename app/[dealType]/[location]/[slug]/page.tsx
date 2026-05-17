@@ -37,6 +37,7 @@ type ListingDetail = Omit<ListingItem, 'city' | 'district'> & {
     verified?: boolean;
     accountCreatedAt?: string;
     userId?: number;
+    avatarUrl?: string;
   };
 };
 
@@ -271,6 +272,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const sellerLabel = isVerifiedSeller ? 'Người bán đã xác thực' : 'Người bán mới';
   const accountAgeText = formatAccountAge(listing.contact?.accountCreatedAt);
   const sellerUserId = Number(listing.contact?.userId ?? 0);
+  const sellerAvatarUrl = String(listing.contact?.avatarUrl ?? '').trim();
   const publishedAt = resolveListingCreatedAt(listing);
   const modifiedAt = resolveListingUpdatedAt(listing);
   const canonicalCategoryPath = categoryPathByDealType(params.dealType);
@@ -453,9 +455,13 @@ export default async function ListingDetailPage({ params }: { params: { dealType
           <aside className="h-fit rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:sticky lg:top-5">
             <div className="mb-4 space-y-3">
               <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--brand-primary)] text-sm font-bold text-white">
-                  {contactName.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'ND'}
-                </span>
+                {sellerAvatarUrl ? (
+                  <img src={sellerAvatarUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" loading="lazy" decoding="async" />
+                ) : (
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--brand-primary)] text-sm font-bold text-white">
+                    {contactName.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'ND'}
+                  </span>
+                )}
                 <div>
                   {sellerBioPath ? (
                     <Link href={sellerBioPath as Route} className="text-base font-bold leading-tight text-slate-900 hover:text-[var(--brand-primary-hover)]">
