@@ -232,6 +232,7 @@ export default function AccountHomePage() {
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [googleTrackingKey, setGoogleTrackingKey] = useState('');
   const [facebookTrackingKey, setFacebookTrackingKey] = useState('');
+  const [profileBio, setProfileBio] = useState('');
   const [message, setMessage] = useState('');
   const [editingDraft, setEditingDraft] = useState<EditListingDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -297,7 +298,7 @@ export default function AccountHomePage() {
       credentials: 'include',
       headers: authHeaders(currentUser),
     });
-    const payload = (await res.json().catch(() => ({}))) as { fullName?: string; contactPhone?: string; phoneVerified?: boolean; googleTrackingKey?: string; facebookTrackingKey?: string; error?: string };
+    const payload = (await res.json().catch(() => ({}))) as { fullName?: string; contactPhone?: string; phoneVerified?: boolean; googleTrackingKey?: string; facebookTrackingKey?: string; bio?: string; error?: string };
     if (!res.ok) {
       if (isExpiredSessionError(payload.error)) {
         writeAuthUser(null);
@@ -316,6 +317,7 @@ export default function AccountHomePage() {
     setPhoneVerified(resolvedPhoneVerified);
     setGoogleTrackingKey(payload.googleTrackingKey ?? '');
     setFacebookTrackingKey(payload.facebookTrackingKey ?? '');
+    setProfileBio(payload.bio ?? '');
     if (currentUser.fullName !== resolvedFullName || currentUser.phone !== resolvedPhone || Boolean(currentUser.phoneVerified) !== resolvedPhoneVerified) {
       const nextUser: AuthUser = { ...currentUser, fullName: resolvedFullName, phone: resolvedPhone, phoneVerified: resolvedPhoneVerified };
       writeAuthUser(nextUser);
@@ -465,7 +467,7 @@ export default function AccountHomePage() {
         'content-type': 'application/json',
         ...authHeaders(user),
       },
-      body: JSON.stringify({ fullName, contactPhone: zaloPhone, googleTrackingKey, facebookTrackingKey }),
+      body: JSON.stringify({ fullName, contactPhone: zaloPhone, googleTrackingKey, facebookTrackingKey, bio: profileBio }),
     });
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
@@ -960,6 +962,17 @@ export default function AccountHomePage() {
                   {phoneVerified ? 'Đã xác thực' : 'Chưa xác thực (sẽ tích hợp SMS/Zalo OTP)'}
                 </span>
               </p>
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <label className="mb-1 block text-xs uppercase tracking-wide text-slate-500">Giới thiệu ngắn trên trang bio cá nhân</label>
+              <textarea
+                className="min-h-[96px] w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                placeholder="Ví dụ: Chuyên nhà đất Đà Nẵng, hỗ trợ xem nhà và kiểm tra pháp lý."
+                value={profileBio}
+                maxLength={300}
+                onChange={(e) => setProfileBio(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-slate-500">{profileBio.length}/300 ký tự. Nội dung này sẽ hiển thị công khai tại trang bio người đăng.</p>
             </div>
           </article>
 

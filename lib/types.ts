@@ -29,6 +29,8 @@ export interface ListingItem {
   created_at?: string;
   createdAt?: string;
   updatedAt?: string;
+  userId?: number;
+  posterName?: string;
 }
 
 export interface SearchResponse {

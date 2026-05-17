@@ -57,6 +57,9 @@ export function ListingCard({
   const publishedAt = resolveListingCreatedAt(listing);
   const absoluteListingUrl = toAbsoluteUrl(detailPath);
   const primaryImageUrl = mainImage ? toAbsoluteUrl(mainImage) : '';
+  const sellerUserId = Number(listing.userId ?? 0);
+  const posterName = String(listing.posterName ?? '').trim();
+  const sellerPath = sellerUserId > 0 ? `/nguoi-dang/${sellerUserId}` : '';
 
   const hasImage = mainImage.trim().length > 0;
   const badgeText = packageBadgeLabel(listing.packageType);
@@ -184,6 +187,14 @@ export function ListingCard({
 
         <p className="line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-slate-600">{preview}</p>
         <p className="line-clamp-1 text-sm text-slate-600">Địa chỉ: {location || 'Đang cập nhật'}</p>
+        {sellerPath && posterName ? (
+          <p className="line-clamp-1 text-sm text-slate-600">
+            Người đăng:{' '}
+            <Link href={sellerPath as Route} className="font-semibold text-[var(--brand-primary-hover)] hover:underline">
+              {posterName}
+            </Link>
+          </p>
+        ) : null}
 
         <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
           <span>

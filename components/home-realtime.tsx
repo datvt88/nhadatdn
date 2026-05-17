@@ -282,8 +282,10 @@ export function HomeRealtime({
     [areaMax, areaMin, district, keyword, priceMax, priceMin, propertyType],
   );
   const districtSlug = useMemo(() => resolveDistrictSlug(district, districts), [district, districts]);
-  const showcaseListings = hasActiveFilters ? listings : initialListings;
-  const showcaseTotal = hasActiveFilters ? total : initialTotal;
+  const baseListings = initialListings.length > 0 ? initialListings : listings;
+  const baseTotal = initialListings.length > 0 ? initialTotal : total;
+  const showcaseListings = hasActiveFilters ? listings : baseListings;
+  const showcaseTotal = hasActiveFilters ? total : baseTotal;
   const showcaseCurrentPage = hasActiveFilters ? currentPage : initialPage;
 
   const keywordSuggestions = useMemo(() => {
@@ -312,6 +314,39 @@ export function HomeRealtime({
       active = false;
     };
   }, [initialDistricts, shouldLoadDistrictCatalog]);
+
+  useEffect(() => {
+    if (initialListings.length > 0 || hasActiveFilters || loading) return;
+    let active = true;
+    const loadInitialListings = async () => {
+      try {
+        const params = buildSearchParams({
+          keyword: '',
+          district: '',
+          priceMin: '',
+          priceMax: '',
+          areaMin: '',
+          areaMax: '',
+          propertyType: '',
+          page: initialPage,
+        });
+        const res = await fetch(`${API_BASE}/search?${params.toString()}`, { cache: 'no-store' });
+        if (!res.ok || !active) return;
+        const payload = (await res.json()) as SearchResponse;
+        if (!active) return;
+        const nextItems = Array.isArray(payload.items) ? payload.items : [];
+        setListings(nextItems);
+        setTotal(Number.isFinite(Number(payload.total)) ? Number(payload.total) : nextItems.length);
+        setCurrentPage(initialPage);
+      } catch {
+        // Keep the existing empty state if the recovery request also fails.
+      }
+    };
+    void loadInitialListings();
+    return () => {
+      active = false;
+    };
+  }, [hasActiveFilters, initialListings.length, initialPage, loading]);
 
   useEffect(() => {
     const normalizedKeyword = normalizeVietnameseKeyword(keyword);

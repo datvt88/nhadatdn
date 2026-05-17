@@ -1,4 +1,4 @@
-﻿import type { Metadata } from 'next';
+﻿import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { HeaderNav } from '@/components/header-nav';
@@ -285,8 +285,9 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const listingAbsoluteUrl = toAbsoluteUrl(path);
   const sellerPublicUrl =
     sellerUserId > 0
-      ? toAbsoluteUrl(`${canonicalCategoryPath}?posterId=${encodeURIComponent(String(sellerUserId))}`)
+      ? toAbsoluteUrl(`/nguoi-dang/${encodeURIComponent(String(sellerUserId))}`)
       : undefined;
+  const sellerBioPath = sellerUserId > 0 ? `/nguoi-dang/${sellerUserId}` : '';
   const publisherSchema = {
     '@type': 'Organization',
     name: 'NhadatDN',
@@ -393,7 +394,14 @@ export default async function ListingDetailPage({ params }: { params: { dealType
               </div>
               <p className="text-sm text-slate-600">Địa chỉ: {toLocation(listing)}</p>
               <p className="text-xs text-slate-500">
-                {formatPublishedDate(publishedAt)} · Người đăng: {contactName}
+                {formatPublishedDate(publishedAt)} · Người đăng:{' '}
+                {sellerBioPath ? (
+                  <Link href={sellerBioPath as Route} className="font-semibold text-[var(--brand-primary-hover)] hover:underline">
+                    {contactName}
+                  </Link>
+                ) : (
+                  contactName
+                )}
               </p>
             </header>
 
@@ -449,7 +457,13 @@ export default async function ListingDetailPage({ params }: { params: { dealType
                   {contactName.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'ND'}
                 </span>
                 <div>
-                  <p className="text-base font-bold leading-tight text-slate-900">{contactName}</p>
+                  {sellerBioPath ? (
+                    <Link href={sellerBioPath as Route} className="text-base font-bold leading-tight text-slate-900 hover:text-[var(--brand-primary-hover)]">
+                      {contactName}
+                    </Link>
+                  ) : (
+                    <p className="text-base font-bold leading-tight text-slate-900">{contactName}</p>
+                  )}
                   <p className="text-xs text-emerald-600">{sellerLabel}</p>
                   <p className="text-xs text-slate-500">{accountAgeText}</p>
                 </div>
@@ -488,16 +502,4 @@ export default async function ListingDetailPage({ params }: { params: { dealType
     </main>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
