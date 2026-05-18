@@ -315,15 +315,21 @@ export default function AccountHomePage() {
     const resolvedFullName = payload.fullName?.trim() || currentUser.fullName || '';
     const resolvedPhone = payload.contactPhone ?? currentUser.phone ?? '';
     const resolvedPhoneVerified = Boolean(payload.phoneVerified ?? currentUser.phoneVerified);
+    const resolvedAvatarUrl = payload.avatarUrl ?? currentUser.avatarUrl ?? '';
     setFullName(resolvedFullName);
     setZaloPhone(resolvedPhone);
     setPhoneVerified(resolvedPhoneVerified);
     setGoogleTrackingKey(payload.googleTrackingKey ?? '');
     setFacebookTrackingKey(payload.facebookTrackingKey ?? '');
     setProfileBio(payload.bio ?? '');
-    setAvatarUrl(payload.avatarUrl ?? currentUser.avatarUrl ?? '');
-    if (currentUser.fullName !== resolvedFullName || currentUser.phone !== resolvedPhone || Boolean(currentUser.phoneVerified) !== resolvedPhoneVerified || (currentUser.avatarUrl ?? '') !== (payload.avatarUrl ?? '')) {
-      const nextUser: AuthUser = { ...currentUser, fullName: resolvedFullName, phone: resolvedPhone, phoneVerified: resolvedPhoneVerified, avatarUrl: payload.avatarUrl ?? currentUser.avatarUrl };
+    setAvatarUrl(resolvedAvatarUrl);
+    if (currentUser.fullName !== resolvedFullName || currentUser.phone !== resolvedPhone || Boolean(currentUser.phoneVerified) !== resolvedPhoneVerified || (currentUser.avatarUrl ?? '') !== resolvedAvatarUrl) {
+      const nextUser: AuthUser = { ...currentUser, fullName: resolvedFullName, phone: resolvedPhone, phoneVerified: resolvedPhoneVerified };
+      if (resolvedAvatarUrl) {
+        nextUser.avatarUrl = resolvedAvatarUrl;
+      } else {
+        delete nextUser.avatarUrl;
+      }
       writeAuthUser(nextUser);
       setUser(nextUser);
     }
