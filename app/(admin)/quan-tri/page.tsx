@@ -106,6 +106,34 @@ type GoogleDriveBackupRunResult = {
   error?: string;
 };
 
+type GoogleMerchantSheetConfig = {
+  spreadsheetId: string;
+  sheetName: string;
+  lastBackupAt: string;
+  lastStatus: string;
+  lastError: string;
+  lastRows: number;
+  lastRange: string;
+  lastDriveFileId: string;
+  lastFileName: string;
+  lastSizeBytes: number;
+  updatedAt: string;
+  error?: string;
+};
+
+type GoogleMerchantSheetRunResult = {
+  csvFileName?: string;
+  driveFileId?: string;
+  sizeBytes?: number;
+  spreadsheetId?: string;
+  sheetName?: string;
+  sheetUrl?: string;
+  updatedRange?: string;
+  rowCount?: number;
+  completedAt?: string;
+  error?: string;
+};
+
 const emptyMetrics: DashboardMetrics = {
   totalUsers: 0,
   totalListings: 0,
@@ -160,6 +188,20 @@ const emptyGoogleDriveBackupConfig: GoogleDriveBackupConfig = {
   updatedAt: '',
 };
 
+const emptyGoogleMerchantSheetConfig: GoogleMerchantSheetConfig = {
+  spreadsheetId: '',
+  sheetName: 'merchant_center_feed',
+  lastBackupAt: '',
+  lastStatus: '',
+  lastError: '',
+  lastRows: 0,
+  lastRange: '',
+  lastDriveFileId: '',
+  lastFileName: '',
+  lastSizeBytes: 0,
+  updatedAt: '',
+};
+
 function actionBadgeClass(action: string): string {
   const normalized = action.trim().toUpperCase();
   if (normalized === 'ARCHIVE' || normalized === 'REMOVE') {
@@ -197,6 +239,11 @@ function normalizeRetentionDays(value: number): number {
 
 function normalizeGoogleDriveAuthMode(value: unknown): 'oauth' | 'service_account' {
   return value === 'oauth' ? 'oauth' : 'service_account';
+}
+
+function normalizeSheetName(value: string): string {
+  const trimmed = value.trim();
+  return trimmed === '' ? 'merchant_center_feed' : trimmed.slice(0, 80);
 }
 
 function formatBytes(value?: number): string {
@@ -239,6 +286,9 @@ export default function AdminHomePage() {
   const [clearStoredGoogleDriveServiceAccount, setClearStoredGoogleDriveServiceAccount] = useState(false);
   const [savingGoogleDriveBackupConfig, setSavingGoogleDriveBackupConfig] = useState(false);
   const [runningGoogleDriveBackup, setRunningGoogleDriveBackup] = useState(false);
+  const [googleMerchantSheetConfig, setGoogleMerchantSheetConfig] = useState<GoogleMerchantSheetConfig>(emptyGoogleMerchantSheetConfig);
+  const [savingGoogleMerchantSheetConfig, setSavingGoogleMerchantSheetConfig] = useState(false);
+  const [runningGoogleMerchantSheetBackup, setRunningGoogleMerchantSheetBackup] = useState(false);
 
   useEffect(() => {
     const syncUser = (): void => {
@@ -768,6 +818,117 @@ export default function AdminHomePage() {
     }
   }
 
+  async function loadGoogleMerchantSheetConfig() {
+    if (!hasAdminAccess(user?.role)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/backups/google-merchant-sheet`, {
+        headers: authHeaders(readAuthUser()),
+        cache: 'no-store',
+      });
+      const payload = (await res.json().catch(() => ({}))) as GoogleMerchantSheetConfig;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi tải cấu hình Merchant Sheet: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setGoogleMerchantSheetConfig({
+        spreadsheetId: typeof payload.spreadsheetId === 'string' ? payload.spreadsheetId : '',
+        sheetName: typeof payload.sheetName === 'string' ? normalizeSheetName(payload.sheetName) : 'merchant_center_feed',
+        lastBackupAt: typeof payload.lastBackupAt === 'string' ? payload.lastBackupAt : '',
+        lastStatus: typeof payload.lastStatus === 'string' ? payload.lastStatus : '',
+        lastError: typeof payload.lastError === 'string' ? payload.lastError : '',
+        lastRows: Number.isFinite(Number(payload.lastRows)) ? Number(payload.lastRows) : 0,
+        lastRange: typeof payload.lastRange === 'string' ? payload.lastRange : '',
+        lastDriveFileId: typeof payload.lastDriveFileId === 'string' ? payload.lastDriveFileId : '',
+        lastFileName: typeof payload.lastFileName === 'string' ? payload.lastFileName : '',
+        lastSizeBytes: Number.isFinite(Number(payload.lastSizeBytes)) ? Number(payload.lastSizeBytes) : 0,
+        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
+      });
+    } catch {
+      setMessage('Không thể tải cấu hình Merchant Sheet.');
+    }
+  }
+
+  async function saveGoogleMerchantSheetConfig() {
+    if (!hasAdminAccess(user?.role) || savingGoogleMerchantSheetConfig) {
+      return;
+    }
+
+    setSavingGoogleMerchantSheetConfig(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/backups/google-merchant-sheet`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          ...authHeaders(readAuthUser()),
+        },
+        body: JSON.stringify({
+          spreadsheetId: googleMerchantSheetConfig.spreadsheetId.trim(),
+          sheetName: normalizeSheetName(googleMerchantSheetConfig.sheetName),
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as GoogleMerchantSheetConfig;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi lưu cấu hình Merchant Sheet: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setGoogleMerchantSheetConfig({
+        spreadsheetId: typeof payload.spreadsheetId === 'string' ? payload.spreadsheetId : '',
+        sheetName: typeof payload.sheetName === 'string' ? normalizeSheetName(payload.sheetName) : 'merchant_center_feed',
+        lastBackupAt: typeof payload.lastBackupAt === 'string' ? payload.lastBackupAt : '',
+        lastStatus: typeof payload.lastStatus === 'string' ? payload.lastStatus : '',
+        lastError: typeof payload.lastError === 'string' ? payload.lastError : '',
+        lastRows: Number.isFinite(Number(payload.lastRows)) ? Number(payload.lastRows) : 0,
+        lastRange: typeof payload.lastRange === 'string' ? payload.lastRange : '',
+        lastDriveFileId: typeof payload.lastDriveFileId === 'string' ? payload.lastDriveFileId : '',
+        lastFileName: typeof payload.lastFileName === 'string' ? payload.lastFileName : '',
+        lastSizeBytes: Number.isFinite(Number(payload.lastSizeBytes)) ? Number(payload.lastSizeBytes) : 0,
+        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
+      });
+      setMessage('Đã cập nhật cấu hình CSV Google Merchant Center.');
+    } catch {
+      setMessage('Không thể lưu cấu hình Merchant Sheet.');
+    } finally {
+      setSavingGoogleMerchantSheetConfig(false);
+    }
+  }
+
+  async function runGoogleMerchantSheetBackupNow() {
+    if (!hasAdminAccess(user?.role) || runningGoogleMerchantSheetBackup) {
+      return;
+    }
+
+    setRunningGoogleMerchantSheetBackup(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/backups/google-merchant-sheet`, {
+        method: 'POST',
+        headers: authHeaders(readAuthUser()),
+      });
+      const payload = (await res.json().catch(() => ({}))) as GoogleMerchantSheetRunResult;
+      if (handleUnauthorized(res.status)) {
+        return;
+      }
+      if (!res.ok) {
+        setMessage(`Lỗi backup CSV Merchant Center: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      setMessage(`Đã upload ${payload.csvFileName ?? 'CSV'} (${formatBytes(payload.sizeBytes)}) lên Google Drive và cập nhật ${payload.rowCount ?? 0} tin đăng${payload.updatedRange ? ` vào Google Sheet (${payload.updatedRange})` : ''}.`);
+      void loadGoogleMerchantSheetConfig();
+    } catch {
+      setMessage('Không thể backup CSV Merchant Center lên Google Sheet.');
+    } finally {
+      setRunningGoogleMerchantSheetBackup(false);
+    }
+  }
+
   useEffect(() => {
     if (hydrated && hasAdminAccess(user?.role)) {
       void loadDashboard();
@@ -776,6 +937,7 @@ export default function AdminHomePage() {
       void loadModerationAIConfig();
       void loadR2StorageConfig();
       void loadGoogleDriveBackupConfig();
+      void loadGoogleMerchantSheetConfig();
     }
   }, [hydrated, user?.role]);
 
@@ -787,6 +949,13 @@ export default function AdminHomePage() {
     (googleDriveBackupConfig.authMode === 'service_account'
       ? googleDriveBackupConfig.hasServiceAccountJson
       : googleDriveBackupConfig.clientId.trim() !== '' && googleDriveBackupConfig.hasClientSecret && googleDriveBackupConfig.hasRefreshToken);
+  const googleMerchantSheetCredentialReady =
+    googleDriveBackupConfig.authMode === 'service_account'
+      ? googleDriveBackupConfig.hasServiceAccountJson
+      : googleDriveBackupConfig.clientId.trim() !== '' && googleDriveBackupConfig.hasClientSecret && googleDriveBackupConfig.hasRefreshToken;
+  const googleMerchantSheetReady =
+    googleMerchantSheetCredentialReady &&
+    (googleDriveBackupConfig.authMode === 'oauth' || googleDriveBackupConfig.folderId.trim() !== '');
 
   if (!hydrated) {
     return (
@@ -1397,6 +1566,75 @@ export default function AdminHomePage() {
             <p>Lần backup gần nhất: {googleDriveBackupConfig.lastBackupAt ? new Date(googleDriveBackupConfig.lastBackupAt).toLocaleString('vi-VN') : 'chưa có'}</p>
             <p>Trạng thái gần nhất: {googleDriveBackupConfig.lastStatus || 'chưa có'}{googleDriveBackupConfig.lastError ? ` - ${googleDriveBackupConfig.lastError}` : ''}</p>
             <p>Cập nhật cấu hình: {googleDriveBackupConfig.updatedAt ? new Date(googleDriveBackupConfig.updatedAt).toLocaleString('vi-VN') : 'chưa có'}</p>
+          </div>
+        </article>
+
+        <article className="neo-panel mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Sao lưu CSV tin đăng lên Google Drive</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Xuất toàn bộ tin đăng thành file CSV cho Google Merchant Center, upload vào Google Drive và đồng bộ thêm vào Google Sheet dùng chung nếu có Spreadsheet ID. Drive folder và credentials dùng cấu hình Google Drive phía trên.
+          </p>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr,240px,180px] lg:items-end">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Google Spreadsheet ID</span>
+              <input
+                value={googleMerchantSheetConfig.spreadsheetId}
+                onChange={(event) => setGoogleMerchantSheetConfig((prev) => ({ ...prev, spreadsheetId: event.target.value }))}
+                placeholder="Tùy chọn: ID trong URL Google Sheet dùng chung"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Tên sheet/tab</span>
+              <input
+                value={googleMerchantSheetConfig.sheetName}
+                onChange={(event) => setGoogleMerchantSheetConfig((prev) => ({ ...prev, sheetName: normalizeSheetName(event.target.value) }))}
+                placeholder="merchant_center_feed"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void saveGoogleMerchantSheetConfig()}
+              disabled={savingGoogleMerchantSheetConfig}
+              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-60"
+            >
+              {savingGoogleMerchantSheetConfig ? 'Đang lưu...' : 'Lưu cấu hình'}
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void runGoogleMerchantSheetBackupNow()}
+              disabled={runningGoogleMerchantSheetBackup || !googleMerchantSheetReady}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {runningGoogleMerchantSheetBackup ? 'Đang backup CSV...' : 'Backup CSV ngay'}
+            </button>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${googleMerchantSheetReady ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+              {googleMerchantSheetReady
+                ? 'Đã sẵn sàng'
+                : !googleMerchantSheetCredentialReady
+                  ? 'Thiếu credentials Google'
+                  : 'Thiếu Google Drive Folder ID'}
+            </span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Feed: Google Merchant Center</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">Dòng gần nhất: {googleMerchantSheetConfig.lastRows}</span>
+          </div>
+
+          <div className="mt-2 text-xs text-slate-500">
+            <p>Credentials đang dùng: {googleDriveBackupConfig.authMode === 'service_account' ? 'Service Account ở mục Google Drive' : 'OAuth ở mục Google Drive'}</p>
+            <p>Google Drive Folder ID: {googleDriveBackupConfig.folderId || 'chưa cấu hình'}</p>
+            <p>Spreadsheet hiện tại: {googleMerchantSheetConfig.spreadsheetId || 'không đồng bộ Sheet'}</p>
+            <p>Tab hiện tại: {googleMerchantSheetConfig.sheetName || 'merchant_center_feed'}</p>
+            <p>File CSV gần nhất: {googleMerchantSheetConfig.lastFileName || 'chưa có'}{googleMerchantSheetConfig.lastSizeBytes ? ` (${formatBytes(googleMerchantSheetConfig.lastSizeBytes)})` : ''}</p>
+            <p>Drive file ID gần nhất: {googleMerchantSheetConfig.lastDriveFileId || 'chưa có'}</p>
+            <p>Lần backup gần nhất: {googleMerchantSheetConfig.lastBackupAt ? new Date(googleMerchantSheetConfig.lastBackupAt).toLocaleString('vi-VN') : 'chưa có'}</p>
+            <p>Trạng thái gần nhất: {googleMerchantSheetConfig.lastStatus || 'chưa có'}{googleMerchantSheetConfig.lastError ? ` - ${googleMerchantSheetConfig.lastError}` : ''}</p>
+            <p>Range gần nhất: {googleMerchantSheetConfig.lastRange || 'chưa có'}</p>
+            <p>Cập nhật cấu hình: {googleMerchantSheetConfig.updatedAt ? new Date(googleMerchantSheetConfig.updatedAt).toLocaleString('vi-VN') : 'chưa có'}</p>
           </div>
         </article>
         {message ? <p className="mt-4 text-sm text-rose-700">{message}</p> : null}
