@@ -109,12 +109,14 @@ type GoogleDriveBackupRunResult = {
 type GoogleMerchantSheetConfig = {
   spreadsheetId: string;
   sheetName: string;
+  shareEmail: string;
   lastBackupAt: string;
   lastStatus: string;
   lastError: string;
   lastRows: number;
   lastRange: string;
   lastDriveFileId: string;
+  lastNativeSheetFileId: string;
   lastFileName: string;
   lastSizeBytes: number;
   updatedAt: string;
@@ -124,6 +126,9 @@ type GoogleMerchantSheetConfig = {
 type GoogleMerchantSheetRunResult = {
   csvFileName?: string;
   driveFileId?: string;
+  nativeSheetFileId?: string;
+  nativeSheetUrl?: string;
+  sharedWithEmail?: string;
   sizeBytes?: number;
   spreadsheetId?: string;
   sheetName?: string;
@@ -190,13 +195,15 @@ const emptyGoogleDriveBackupConfig: GoogleDriveBackupConfig = {
 
 const emptyGoogleMerchantSheetConfig: GoogleMerchantSheetConfig = {
   spreadsheetId: '',
-  sheetName: 'merchant_center_feed',
+  sheetName: 'Products',
+  shareEmail: '',
   lastBackupAt: '',
   lastStatus: '',
   lastError: '',
   lastRows: 0,
   lastRange: '',
   lastDriveFileId: '',
+  lastNativeSheetFileId: '',
   lastFileName: '',
   lastSizeBytes: 0,
   updatedAt: '',
@@ -243,7 +250,7 @@ function normalizeGoogleDriveAuthMode(value: unknown): 'oauth' | 'service_accoun
 
 function normalizeSheetName(value: string): string {
   const trimmed = value.trim();
-  return trimmed === '' ? 'merchant_center_feed' : trimmed.slice(0, 80);
+  return trimmed === '' ? 'Products' : trimmed.slice(0, 80);
 }
 
 function formatBytes(value?: number): string {
@@ -838,13 +845,15 @@ export default function AdminHomePage() {
       }
       setGoogleMerchantSheetConfig({
         spreadsheetId: typeof payload.spreadsheetId === 'string' ? payload.spreadsheetId : '',
-        sheetName: typeof payload.sheetName === 'string' ? normalizeSheetName(payload.sheetName) : 'merchant_center_feed',
+        sheetName: typeof payload.sheetName === 'string' ? normalizeSheetName(payload.sheetName) : 'Products',
+        shareEmail: typeof payload.shareEmail === 'string' ? payload.shareEmail : '',
         lastBackupAt: typeof payload.lastBackupAt === 'string' ? payload.lastBackupAt : '',
         lastStatus: typeof payload.lastStatus === 'string' ? payload.lastStatus : '',
         lastError: typeof payload.lastError === 'string' ? payload.lastError : '',
         lastRows: Number.isFinite(Number(payload.lastRows)) ? Number(payload.lastRows) : 0,
         lastRange: typeof payload.lastRange === 'string' ? payload.lastRange : '',
         lastDriveFileId: typeof payload.lastDriveFileId === 'string' ? payload.lastDriveFileId : '',
+        lastNativeSheetFileId: typeof payload.lastNativeSheetFileId === 'string' ? payload.lastNativeSheetFileId : '',
         lastFileName: typeof payload.lastFileName === 'string' ? payload.lastFileName : '',
         lastSizeBytes: Number.isFinite(Number(payload.lastSizeBytes)) ? Number(payload.lastSizeBytes) : 0,
         updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
@@ -870,6 +879,7 @@ export default function AdminHomePage() {
         body: JSON.stringify({
           spreadsheetId: googleMerchantSheetConfig.spreadsheetId.trim(),
           sheetName: normalizeSheetName(googleMerchantSheetConfig.sheetName),
+          shareEmail: googleMerchantSheetConfig.shareEmail.trim(),
         }),
       });
       const payload = (await res.json().catch(() => ({}))) as GoogleMerchantSheetConfig;
@@ -882,13 +892,15 @@ export default function AdminHomePage() {
       }
       setGoogleMerchantSheetConfig({
         spreadsheetId: typeof payload.spreadsheetId === 'string' ? payload.spreadsheetId : '',
-        sheetName: typeof payload.sheetName === 'string' ? normalizeSheetName(payload.sheetName) : 'merchant_center_feed',
+        sheetName: typeof payload.sheetName === 'string' ? normalizeSheetName(payload.sheetName) : 'Products',
+        shareEmail: typeof payload.shareEmail === 'string' ? payload.shareEmail : '',
         lastBackupAt: typeof payload.lastBackupAt === 'string' ? payload.lastBackupAt : '',
         lastStatus: typeof payload.lastStatus === 'string' ? payload.lastStatus : '',
         lastError: typeof payload.lastError === 'string' ? payload.lastError : '',
         lastRows: Number.isFinite(Number(payload.lastRows)) ? Number(payload.lastRows) : 0,
         lastRange: typeof payload.lastRange === 'string' ? payload.lastRange : '',
         lastDriveFileId: typeof payload.lastDriveFileId === 'string' ? payload.lastDriveFileId : '',
+        lastNativeSheetFileId: typeof payload.lastNativeSheetFileId === 'string' ? payload.lastNativeSheetFileId : '',
         lastFileName: typeof payload.lastFileName === 'string' ? payload.lastFileName : '',
         lastSizeBytes: Number.isFinite(Number(payload.lastSizeBytes)) ? Number(payload.lastSizeBytes) : 0,
         updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : '',
@@ -920,7 +932,7 @@ export default function AdminHomePage() {
         setMessage(`Lỗi backup CSV Merchant Center: ${String(payload.error ?? 'unknown')}`);
         return;
       }
-      setMessage(`Đã upload ${payload.csvFileName ?? 'CSV'} (${formatBytes(payload.sizeBytes)}) lên Google Drive và cập nhật ${payload.rowCount ?? 0} tin đăng${payload.updatedRange ? ` vào Google Sheet (${payload.updatedRange})` : ''}.`);
+      setMessage(`Đã upload CSV và tạo Google Sheet chuẩn Merchant Center (${payload.rowCount ?? 0} tin đăng)${payload.sharedWithEmail ? `, đã share cho ${payload.sharedWithEmail}` : ''}.`);
       void loadGoogleMerchantSheetConfig();
     } catch {
       setMessage('Không thể backup CSV Merchant Center lên Google Sheet.');
@@ -1572,16 +1584,16 @@ export default function AdminHomePage() {
         <article className="neo-panel mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Sao lưu CSV tin đăng lên Google Drive</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Xuất toàn bộ tin đăng thành file CSV cho Google Merchant Center, upload vào Google Drive và đồng bộ thêm vào Google Sheet dùng chung nếu có Spreadsheet ID. Drive folder và credentials dùng cấu hình Google Drive phía trên.
+            Xuất toàn bộ tin đăng thành file CSV và Google Sheet đúng header Merchant Center. Để Merchant Center nhận Sheet ổn định, tạo nguồn sản phẩm bằng Google Sheets template trong Merchant Center, paste Spreadsheet ID vào đây và share quyền Editor cho Service Account phía trên.
           </p>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr,240px,180px] lg:items-end">
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr,220px,1fr,180px] lg:items-end">
             <label className="flex flex-col gap-1 text-sm text-slate-700">
-              <span>Google Spreadsheet ID</span>
+              <span>Merchant Center Spreadsheet ID</span>
               <input
                 value={googleMerchantSheetConfig.spreadsheetId}
                 onChange={(event) => setGoogleMerchantSheetConfig((prev) => ({ ...prev, spreadsheetId: event.target.value }))}
-                placeholder="Tùy chọn: ID trong URL Google Sheet dùng chung"
+                placeholder="ID của Google Sheets template trong Merchant Center"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
@@ -1590,7 +1602,17 @@ export default function AdminHomePage() {
               <input
                 value={googleMerchantSheetConfig.sheetName}
                 onChange={(event) => setGoogleMerchantSheetConfig((prev) => ({ ...prev, sheetName: normalizeSheetName(event.target.value) }))}
-                placeholder="merchant_center_feed"
+                placeholder="Products"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span>Email Google dùng Merchant Center</span>
+              <input
+                type="email"
+                value={googleMerchantSheetConfig.shareEmail}
+                onChange={(event) => setGoogleMerchantSheetConfig((prev) => ({ ...prev, shareEmail: event.target.value }))}
+                placeholder="Tùy chọn: email để share Sheet"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
               />
             </label>
@@ -1628,9 +1650,11 @@ export default function AdminHomePage() {
             <p>Credentials đang dùng: {googleDriveBackupConfig.authMode === 'service_account' ? 'Service Account ở mục Google Drive' : 'OAuth ở mục Google Drive'}</p>
             <p>Google Drive Folder ID: {googleDriveBackupConfig.folderId || 'chưa cấu hình'}</p>
             <p>Spreadsheet hiện tại: {googleMerchantSheetConfig.spreadsheetId || 'không đồng bộ Sheet'}</p>
-            <p>Tab hiện tại: {googleMerchantSheetConfig.sheetName || 'merchant_center_feed'}</p>
+            <p>Tab hiện tại: {googleMerchantSheetConfig.sheetName || 'Products'}</p>
+            <p>Email được share Sheet: {googleMerchantSheetConfig.shareEmail || 'chưa cấu hình'}</p>
             <p>File CSV gần nhất: {googleMerchantSheetConfig.lastFileName || 'chưa có'}{googleMerchantSheetConfig.lastSizeBytes ? ` (${formatBytes(googleMerchantSheetConfig.lastSizeBytes)})` : ''}</p>
             <p>Drive file ID gần nhất: {googleMerchantSheetConfig.lastDriveFileId || 'chưa có'}</p>
+            <p>Google Sheet file ID gần nhất: {googleMerchantSheetConfig.lastNativeSheetFileId || 'chưa có'}</p>
             <p>Lần backup gần nhất: {googleMerchantSheetConfig.lastBackupAt ? new Date(googleMerchantSheetConfig.lastBackupAt).toLocaleString('vi-VN') : 'chưa có'}</p>
             <p>Trạng thái gần nhất: {googleMerchantSheetConfig.lastStatus || 'chưa có'}{googleMerchantSheetConfig.lastError ? ` - ${googleMerchantSheetConfig.lastError}` : ''}</p>
             <p>Range gần nhất: {googleMerchantSheetConfig.lastRange || 'chưa có'}</p>
