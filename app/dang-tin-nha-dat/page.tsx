@@ -634,7 +634,8 @@ export default function PostListingDanangPage() {
     const price = parsePositiveDecimal(priceInput, 2);
     const bedrooms = parseNonNegativeInt(String(formData.get('bedrooms') ?? ''));
     const bathrooms = parseNonNegativeInt(String(formData.get('bathrooms') ?? ''));
-    const floors = parseOptionalDecimal(String(formData.get('floors') ?? ''));
+    const floorsRaw = String(formData.get('floors') ?? '');
+    const floors = floorsRaw.trim() === '' ? undefined : parseNonNegativeInt(floorsRaw);
     const frontage = parseOptionalDecimal(String(formData.get('frontage') ?? ''));
     const roadWidth = parseOptionalDecimal(String(formData.get('roadWidth') ?? ''));
     const finalAddress = address.trim();
@@ -652,6 +653,7 @@ export default function PostListingDanangPage() {
     if (area === null) nextErrors.area = 'Diện tích không hợp lệ.';
     if (bedrooms === null) nextErrors.bedrooms = 'Số phòng ngủ không hợp lệ.';
     if (bathrooms === null) nextErrors.bathrooms = 'Số phòng toilet không hợp lệ.';
+    if (floors === null) nextErrors.floors = 'Số tầng phải là số nguyên không âm.';
     if (!cityId || !districtValue || !wardValue) nextErrors.districtId = 'Vui lòng chọn đầy đủ phường/xã.';
     if (!finalAddress) nextErrors.address = 'Vui lòng nhập địa chỉ.';
     if (!posterName.trim()) nextErrors.posterName = 'Vui lòng nhập tên người đăng.';
@@ -668,7 +670,6 @@ export default function PostListingDanangPage() {
     setWardId(String(wardValue));
 
     const payload = {
-      userId: activeUser.id,
       title,
       description,
       price,
