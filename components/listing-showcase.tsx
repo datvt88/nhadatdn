@@ -1,4 +1,8 @@
+'use client';
+
+import { useMemo, useState } from 'react';
 import type { ListingItem } from '../lib/types';
+import { sortListings, type ListingSortMode } from '../lib/listing-sort';
 import { ListingCard } from './listing-card';
 
 function sectionTitle(id: string, label: string) {
@@ -31,6 +35,9 @@ export function ListingShowcase({
   useLinkPagination = false,
   buildPageHref,
 }: ListingShowcaseProps) {
+  const [sortMode, setSortMode] = useState<ListingSortMode>('default');
+  const visibleListings = useMemo(() => (sortMode === 'default' ? listings : sortListings(listings, sortMode)), [listings, sortMode]);
+
   if (listings.length === 0) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
@@ -60,13 +67,26 @@ export function ListingShowcase({
             {' / '}
             <span className="font-semibold text-slate-900">{total}</span> tin
           </p>
-          <p className="text-xs text-slate-500 sm:text-sm">
-            {loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}
-          </p>
+          <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:text-sm">
+            <p>{loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}</p>
+            <label className="flex items-center gap-2">
+              <span className="font-semibold text-slate-700">Sắp xếp</span>
+              <select
+                aria-label="Sắp xếp tin đăng"
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/20"
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value as ListingSortMode)}
+              >
+                <option value="default">Mặc định</option>
+                <option value="price_asc">Giá thấp nhất</option>
+                <option value="price_desc">Giá cao nhất</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {listings.map((listing, index) => (
+          {visibleListings.map((listing, index) => (
             <ListingCard key={listing.id} listing={listing} priorityImage={index === 0} />
           ))}
         </div>

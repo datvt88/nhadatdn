@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../lib/api';
 import { buildPagePath } from '../lib/pagination-seo';
 import { resolveDealType, type DealType } from '../lib/listing-route';
-import { sortVipFirstNewest } from '../lib/listing-sort';
+import { sortListings, sortVipFirstNewest, type ListingSortMode } from '../lib/listing-sort';
 import type { ListingItem, SearchResponse } from '../lib/types';
 import { ListingGrid } from './listing-grid';
 
@@ -42,6 +42,7 @@ export function SearchListingFeed({
   const [items, setItems] = useState<ListingItem[]>(initialItems);
   const [nextCursor, setNextCursor] = useState<string | undefined>(initial.nextCursor);
   const [loading, setLoading] = useState(false);
+  const [sortMode, setSortMode] = useState<ListingSortMode>('default');
 
   useEffect(() => {
     setItems(initialItems);
@@ -61,6 +62,7 @@ export function SearchListingFeed({
     if (totalPages <= 7) return true;
     return page === 1 || page === totalPages || Math.abs(page - safeCurrentPage) <= 1;
   });
+  const visibleItems = useMemo(() => sortListings(items, sortMode), [items, sortMode]);
 
   const summary = useMemo(() => {
     const shown = items.length;
@@ -98,12 +100,27 @@ export function SearchListingFeed({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between rounded-xl border border-[var(--brand-primary)]/20 bg-[rgba(40,189,191,0.08)] px-3 py-2 text-sm text-slate-600">
+      <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-primary)]/20 bg-[rgba(40,189,191,0.08)] px-3 py-2 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
         <p>{summary}</p>
-        <p>{initial.took} ms</p>
+        <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:text-sm">
+          <p>{initial.took} ms</p>
+          <label className="flex items-center gap-2">
+            <span className="font-semibold text-slate-700">Sắp xếp</span>
+            <select
+              aria-label="Sắp xếp tin đăng"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/20"
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as ListingSortMode)}
+            >
+              <option value="default">Mặc định</option>
+              <option value="price_asc">Giá thấp nhất</option>
+              <option value="price_desc">Giá cao nhất</option>
+            </select>
+          </label>
+        </div>
       </div>
 
-      <ListingGrid listings={items} />
+      <ListingGrid listings={visibleItems} />
 
       {mode === 'page' && totalPages > 1 ? (
         <nav className="flex flex-wrap items-center justify-center gap-2" aria-label="Phân trang danh mục">
