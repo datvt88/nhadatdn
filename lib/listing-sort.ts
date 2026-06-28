@@ -37,9 +37,10 @@ export function sortListings(items: ListingItem[], mode: ListingSortMode): Listi
   return [...items].sort((a, b) => {
     const priceA = Number(a.price);
     const priceB = Number(b.price);
-    const safePriceA = Number.isFinite(priceA) ? priceA : Number.POSITIVE_INFINITY;
-    const safePriceB = Number.isFinite(priceB) ? priceB : Number.POSITIVE_INFINITY;
-    const priceDiff = mode === 'price_asc' ? safePriceA - safePriceB : safePriceB - safePriceA;
+    const hasPriceA = Number.isFinite(priceA);
+    const hasPriceB = Number.isFinite(priceB);
+    if (hasPriceA !== hasPriceB) return hasPriceA ? -1 : 1;
+    const priceDiff = mode === 'price_asc' ? priceA - priceB : priceB - priceA;
     if (priceDiff !== 0) return priceDiff;
 
     const createdA = getCreatedAt(a);

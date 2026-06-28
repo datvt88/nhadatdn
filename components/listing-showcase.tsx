@@ -59,17 +59,22 @@ export function ListingShowcase({
     <div className="space-y-6">
       <section>
         {sectionTitle('homepage-latest', 'Bất động sản nổi bật mới nhất')}
-        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            Hiển thị <span className="font-semibold text-slate-900">{startItem}</span>
-            {' - '}
-            <span className="font-semibold text-slate-900">{endItem}</span>
-            {' / '}
-            <span className="font-semibold text-slate-900">{total}</span> tin
-          </p>
-          <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:text-sm">
-            <p>{loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}</p>
-            <label className="flex items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="whitespace-nowrap">
+              Hiển thị <span className="font-semibold text-slate-900">{startItem}</span>
+              {' - '}
+              <span className="font-semibold text-slate-900">{endItem}</span>
+              {' / '}
+              <span className="font-semibold text-slate-900">{total}</span> tin
+            </p>
+            <span className="text-slate-300" aria-hidden="true">
+              |
+            </span>
+            <p className="whitespace-nowrap text-slate-500">{loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500 sm:text-sm">
+            <label className="flex items-center gap-2 whitespace-nowrap">
               <span className="font-semibold text-slate-700">Sắp xếp</span>
               <select
                 aria-label="Sắp xếp tin đăng"

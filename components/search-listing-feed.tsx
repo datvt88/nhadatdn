@@ -67,10 +67,12 @@ export function SearchListingFeed({
   const summary = useMemo(() => {
     const shown = items.length;
     if (shown <= 0) return 'Không có kết quả';
-    if (mode === 'page') return `Hiển thị ${startItem}-${endItem} / ${total} tin`;
+    if (mode === 'page') return `Hiển thị ${startItem} - ${endItem} / ${total} tin`;
     if (hasDealTypeFilter) return `Đang hiển thị ${shown} tin`;
     return `Đang hiển thị ${shown}/${total} tin`;
   }, [endItem, hasDealTypeFilter, items.length, mode, startItem, total]);
+
+  const pageStatus = mode === 'page' ? `Trang ${safeCurrentPage}/${totalPages}` : `${initial.took} ms`;
 
   async function loadMore() {
     if (!nextCursor || loading) return;
@@ -100,11 +102,16 @@ export function SearchListingFeed({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-primary)]/20 bg-[rgba(40,189,191,0.08)] px-3 py-2 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-        <p>{summary}</p>
-        <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:text-sm">
-          <p>{initial.took} ms</p>
-          <label className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-xl border border-[var(--brand-primary)]/20 bg-[rgba(40,189,191,0.08)] px-3 py-2 text-sm text-slate-600">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="whitespace-nowrap">{summary}</p>
+          <span className="text-slate-300" aria-hidden="true">
+            |
+          </span>
+          <p className="whitespace-nowrap text-slate-500">{pageStatus}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500 sm:text-sm">
+          <label className="flex items-center gap-2 whitespace-nowrap">
             <span className="font-semibold text-slate-700">Sắp xếp</span>
             <select
               aria-label="Sắp xếp tin đăng"
