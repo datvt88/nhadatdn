@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { Route } from 'next';
 import { useMemo, useState } from 'react';
 import type { ListingItem } from '../lib/types';
-import { formatAreaM2, formatListingPrice, formatPricePerM2, resolveListingCreatedAt, resolveListingImages } from '../lib/listing-presenter';
+import { formatAreaM2, formatListingDisplayAddress, formatListingPrice, formatPricePerM2, resolveListingCreatedAt, resolveListingImages } from '../lib/listing-presenter';
 import { resolveDealType, buildListingPath } from '../lib/listing-route';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '../lib/listing-labels';
 import { toAbsoluteUrl } from '../lib/seo';
@@ -28,7 +28,7 @@ export function ListingCard({
 }) {
   const cityLabel = formatSlugLabel(listing.city);
   const districtLabel = formatSlugLabel(listing.district);
-  const location = listing.address ?? [districtLabel, cityLabel].filter(Boolean).join(', ');
+  const location = formatListingDisplayAddress(listing.address) || [districtLabel, cityLabel].filter(Boolean).join(', ');
   const gallery = resolveListingImages(listing);
   const [failedMap, setFailedMap] = useState<Record<string, true>>({});
 

@@ -8,7 +8,7 @@ import { HeaderNav } from '../../components/header-nav';
 import { API_BASE } from '../../lib/api';
 import { authHeaders, readAuthUser, writeAuthUser, type AuthUser } from '../../lib/auth-session';
 import { buildListingPath } from '../../lib/listing-route';
-import { formatListingPrice } from '../../lib/listing-presenter';
+import { formatListingDisplayAddress, formatListingPrice } from '../../lib/listing-presenter';
 
 type LoginPayload = { user: AuthUser; sessionToken?: string };
 type PostResult = { id: number; slug: string; beanCost: number; beanBalance: number };
@@ -442,7 +442,9 @@ export default function PostListingDanangPage() {
         const data = (await res.json().catch(() => ({}))) as { items?: AddressSuggestion[] };
         if (!active) return;
         const items = Array.isArray(data.items)
-          ? data.items.filter((item) => typeof item?.label === 'string' && item.label.trim().length > 0)
+          ? data.items
+              .map((item) => ({ ...item, label: formatListingDisplayAddress(item?.label) }))
+              .filter((item) => item.label.length > 0)
           : [];
         setAddressSuggestions(items.slice(0, 6));
       } catch {
@@ -921,9 +923,10 @@ export default function PostListingDanangPage() {
                             type="button"
                             className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
                             onClick={() => {
-                              setAddress(item.label);
+                              const displayAddress = formatListingDisplayAddress(item.label);
+                              setAddress(displayAddress);
                               if (catalog) {
-                                const inferred = inferLocationFromAddress(catalog, districtId, wardId, item.label);
+                                const inferred = inferLocationFromAddress(catalog, districtId, wardId, displayAddress);
                                 if (inferred.district) setDistrictId(String(inferred.district.id));
                                 if (inferred.ward) setWardId(String(inferred.ward.id));
                               }
@@ -932,7 +935,7 @@ export default function PostListingDanangPage() {
                               clearFieldError('districtId');
                             }}
                           >
-                            {item.label}
+                            {formatListingDisplayAddress(item.label)}
                           </button>
                         </li>
                       ))}

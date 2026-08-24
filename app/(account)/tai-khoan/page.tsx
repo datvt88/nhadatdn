@@ -7,6 +7,7 @@ import { HeaderNav } from '../../../components/header-nav';
 import { API_BASE } from '../../../lib/api';
 import { authHeaders, hasAdminAccess, readAuthUser, subscribeAuthUser, writeAuthUser, type AuthUser } from '../../../lib/auth-session';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName, shouldShowVipBadge } from '../../../lib/listing-labels';
+import { formatListingDisplayAddress } from '../../../lib/listing-presenter';
 import { buildListingPath, resolveDealType } from '../../../lib/listing-route';
 
 type MyListingItem = {
@@ -392,11 +393,11 @@ export default function AccountHomePage() {
     const seen = new Set<string>();
     const output: AddressSuggestion[] = [];
     for (const district of danangCatalog.districts) {
-      const districtName = String(district.name ?? '').trim();
+
       for (const ward of district.wards ?? []) {
         const wardName = String(ward.name ?? '').trim();
         if (!wardName) continue;
-        const candidate = `${wardName}, ${districtName}, Đà Nẵng`;
+        const candidate = `${wardName}, TP Đà Nẵng`;
         const normalized = normalizeSearchText(candidate);
         if (query.length > 0 && !normalized.includes(query)) continue;
         if (seen.has(normalized)) continue;
@@ -436,7 +437,7 @@ export default function AccountHomePage() {
           ? remotePayload.items
               .filter((item) => typeof item?.label === 'string' && item.label.trim().length > 0)
               .map((item) => {
-                const mapped: AddressSuggestion = { label: String(item.label).trim() };
+                const mapped: AddressSuggestion = { label: formatListingDisplayAddress(item.label) };
                 if (typeof item.lat === 'number') mapped.lat = item.lat;
                 if (typeof item.lng === 'number') mapped.lng = item.lng;
                 return mapped;
@@ -1325,11 +1326,11 @@ export default function AccountHomePage() {
                             type="button"
                             className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
                             onClick={() => {
-                              setEditingDraft((prev) => (prev ? { ...prev, address: item.label } : prev));
+                              setEditingDraft((prev) => (prev ? { ...prev, address: formatListingDisplayAddress(item.label) } : prev));
                               setEditAddressSuggestions([]);
                             }}
                           >
-                            {item.label}
+                            {formatListingDisplayAddress(item.label)}
                           </button>
                         </li>
                       ))}

@@ -92,6 +92,30 @@ export function resolveListingUpdatedAt(listing: ListingItem | { updatedAt?: unk
   return resolveListingCreatedAt(listing as ListingItem);
 }
 
+export function formatListingDisplayAddress(value?: unknown): string {
+  if (typeof value !== 'string') return '';
+
+  const seen = new Set<string>();
+  return value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .filter((part) => !/^(?:tổ\s*dân\s*phố|tdp)(?:\s|$)/i.test(part))
+    .map((part) => {
+      if (/^(?:thành\s*phố|tp\.?)\s*đà\s*nẵng$/i.test(part) || /^đà\s*nẵng$/i.test(part)) {
+        return 'TP Đà Nẵng';
+      }
+      return part;
+    })
+    .filter((part) => {
+      const key = part.toLocaleLowerCase('vi-VN');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(', ');
+}
+
 function formatDecimal(value: number): string {
   return value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d*[1-9])0$/, '$1');
 }
