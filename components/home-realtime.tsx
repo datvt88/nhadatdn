@@ -655,7 +655,7 @@ export function HomeRealtime({
             <input aria-label="Diện tích tối đa" placeholder="DT đến (m2)" className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]" value={areaMax} onChange={(event) => setAreaMax(event.target.value)} />
             <select
               aria-label="Lọc theo loại hình bất động sản"
-              className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px]"
+              className="col-span-2 h-10 rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-[var(--brand-primary)] sm:h-11 sm:text-[15px] md:col-span-3 xl:col-span-1"
               value={propertyType}
               onChange={(event) => setPropertyType(event.target.value)}
             >

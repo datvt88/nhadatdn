@@ -59,7 +59,7 @@ export function ListingShowcase({
     <div className="space-y-6">
       <section>
         {sectionTitle('homepage-latest', 'Bất động sản nổi bật mới nhất')}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm sm:items-center">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <p className="whitespace-nowrap">
               Hiển thị <span className="font-semibold text-slate-900">{startItem}</span>
@@ -73,8 +73,8 @@ export function ListingShowcase({
             </span>
             <p className="whitespace-nowrap text-slate-500">{loading ? 'Đang cập nhật kết quả...' : `Trang ${safeCurrentPage}/${totalPages}`}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500 sm:text-sm">
-            <label className="flex items-center gap-2 whitespace-nowrap">
+          <div className="flex w-full items-center gap-2 text-xs text-slate-500 sm:w-auto sm:text-sm">
+            <label className="flex w-full items-center justify-between gap-2 whitespace-nowrap sm:w-auto sm:justify-start">
               <span className="font-semibold text-slate-700">Sắp xếp</span>
               <select
                 aria-label="Sắp xếp tin đăng"

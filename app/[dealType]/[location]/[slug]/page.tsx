@@ -386,7 +386,7 @@ export default async function ListingDetailPage({ params }: { params: { dealType
                 <ListingDetailActions slug={listing.slug} title={listing.title} path={path} price={Number(listing.price)} area={Number(listing.area)} address={toLocation(listing)} {...(gallery[0] ? { image: gallery[0] } : {})} />
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="flex min-w-0 items-baseline gap-2 whitespace-nowrap text-[var(--brand-primary-hover)]">
+                <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-[var(--brand-primary-hover)]">
                   <span className="text-3xl font-extrabold">{formatListingPrice(Number(listing.price), canonicalDealType)}</span>
                   <span className="text-sm font-medium text-slate-500">{formatAreaM2(Number(listing.area))}</span>
                   {pricePerM2 ? <span className="text-sm font-semibold text-emerald-700">{pricePerM2}</span> : null}

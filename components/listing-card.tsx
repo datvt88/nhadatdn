@@ -180,7 +180,7 @@ export function ListingCard({
           </Link>
         </h3>
 
-        <p className="flex min-w-0 items-baseline gap-1.5 whitespace-nowrap text-[clamp(1.28rem,2vw,1.5rem)] font-extrabold tracking-[-0.03em] text-[var(--brand-primary-hover)]">
+        <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[clamp(1.28rem,2vw,1.5rem)] font-extrabold tracking-[-0.03em] text-[var(--brand-primary-hover)]">
           <span className="shrink-0">{formatListingPrice(Number(listing.price), dealType)}</span>
           <span className="shrink-0 text-[0.72rem] font-medium tracking-normal text-slate-500 sm:text-xs">{formatAreaM2(Number(listing.area))}</span>
           {pricePerM2 ? <span className="shrink-0 text-[0.72rem] font-semibold tracking-normal text-emerald-700 sm:text-xs">{pricePerM2}</span> : null}
