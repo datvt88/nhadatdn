@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
@@ -7,7 +7,7 @@ import { HeaderNav } from '../../../components/header-nav';
 import { API_BASE } from '../../../lib/api';
 import { authHeaders, hasAdminAccess, readAuthUser, subscribeAuthUser, writeAuthUser, type AuthUser } from '../../../lib/auth-session';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName, shouldShowVipBadge } from '../../../lib/listing-labels';
-import { formatListingDisplayAddress } from '../../../lib/listing-presenter';
+import { formatAreaM2, formatListingDisplayAddress, formatListingPrice, resolveSeoImageUrls, type ListingImageLike } from '../../../lib/listing-presenter';
 import { buildListingPath, resolveDealType } from '../../../lib/listing-route';
 
 type MyListingItem = {
@@ -21,6 +21,8 @@ type MyListingItem = {
   userId: number;
   dealType?: string;
   propertyType?: string;
+  districtName?: string;
+  wardName?: string;
   createdAt: string;
 };
 
@@ -54,10 +56,28 @@ type DanangCatalog = { cityId?: number; cityName?: string; districts?: DistrictC
 type ViewStatus = 'all' | 'active-sale' | 'sold' | 'active-rent' | 'rented';
 type UploadResult = { items?: Array<{ url?: string; size?: number }> };
 type SessionPayload = { user?: AuthUser; sessionToken?: string; error?: string };
+type SocialListingDetail = {
+  title?: string;
+  status?: string;
+  price?: number;
+  area?: number;
+  address?: string;
+  city?: string | { name?: string };
+  district?: string | { name?: string };
+  ward?: string | { name?: string };
+  coverImage?: string;
+  images?: ListingImageLike[];
+  error?: string;
+};
+type SocialListingPreview = {
+  imageUrl: string;
+  location: string;
+};
 
 const USER_LISTING_EDIT_WINDOW_DAYS = 30;
 const HOUSE_DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Tây Bắc', 'Đông Bắc', 'Tây Nam', 'Đông Nam'] as const;
 const PROPERTY_TYPES = ['Nhà mặt tiền', 'Nhà kiệt, hẻm', 'Biệt thự, nhà liền kề', 'Căn hộ chung cư', 'Nhà trọ, phòng trọ', 'Cửa hàng, kho, xưởng', 'Nhà hàng, khách sạn', 'Đất thổ cư', 'Đất nền, đất dự án', 'Đất nông nghiệp', 'Trang trại, khu sinh thái', 'Các loại khác'] as const;
+const PUBLIC_SITE_URL = 'https://nhadatdn.net';
 
 const packageGuide = [
   { packageType: 'NORMAL', beanCost: 5, note: 'Tin thường, trừ 5 Bean/tin' },
@@ -66,6 +86,44 @@ const packageGuide = [
 
 function resolveListingDealType(item: Pick<MyListingItem, 'title' | 'dealType'>): 'can-ban' | 'can-mua' | 'cho-thue' {
   return resolveDealType(item.title, item.dealType);
+}
+
+function buildSocialProductPost(item: MyListingItem): { publicUrl: string; facebookUrl: string; caption: string } {
+  const dealType = resolveListingDealType(item);
+  const detailPath = buildListingPath({
+    slug: item.slug,
+    title: item.title,
+    ...(item.districtName ? { district: item.districtName } : {}),
+    ...(item.wardName ? { ward: item.wardName } : {}),
+    categoryHint: dealType,
+  });
+  const publicUrl = new URL(detailPath, PUBLIC_SITE_URL).toString();
+  const facts = [
+    'Giá: ' + formatListingPrice(Number(item.price), dealType),
+    'Diện tích: ' + formatAreaM2(Number(item.area)),
+    item.propertyType?.trim() || '',
+  ].filter(Boolean);
+  const location = formatListingDisplayAddress(
+    [item.wardName?.trim(), item.districtName?.trim(), 'TP Đà Nẵng'].filter(Boolean).join(', '),
+  );
+  const caption = [
+    item.title.trim(),
+    facts.join(' | '),
+    location ? 'Khu vực: ' + location : '',
+    'Xem chi tiết: ' + publicUrl,
+    '#NhadatDN #NhaDatDaNang',
+  ].filter(Boolean).join('\n');
+
+  return {
+    publicUrl,
+    facebookUrl: 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(publicUrl),
+    caption,
+  };
+}
+
+function readSocialLocationName(value?: string | { name?: string }): string {
+  if (typeof value === 'string') return value.trim();
+  return String(value?.name ?? '').trim();
 }
 
 function statusOptionsForListing(item: Pick<MyListingItem, 'title' | 'dealType'>): Array<{ value: 'ACTIVE' | 'SOLD' | 'RENTED'; label: string }> {
@@ -224,6 +282,13 @@ export default function AccountHomePage() {
   const [showSignupBeanWelcome, setShowSignupBeanWelcome] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [myListings, setMyListings] = useState<MyListingItem[]>([]);
+  const [socialListingId, setSocialListingId] = useState('');
+  const [socialCaption, setSocialCaption] = useState('');
+  const [socialMessage, setSocialMessage] = useState('');
+  const [socialPreview, setSocialPreview] = useState<SocialListingPreview | null>(null);
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [socialPublic, setSocialPublic] = useState(false);
+  const [socialCaptionCopied, setSocialCaptionCopied] = useState(false);
   const [statusById, setStatusById] = useState<Record<number, string>>({});
   const [viewStatus, setViewStatus] = useState<ViewStatus>('all');
   const [fromDate, setFromDate] = useState('');
@@ -245,6 +310,7 @@ export default function AccountHomePage() {
   const [editAddressSuggestions, setEditAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [editAddressLoading, setEditAddressLoading] = useState(false);
   const [danangCatalog, setDanangCatalog] = useState<DanangCatalog | null>(null);
+  const socialWidgetRef = useRef<HTMLElement | null>(null);
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -538,6 +604,159 @@ export default function AccountHomePage() {
     });
   }, [myListings, viewStatus, fromDate, toDate]);
 
+  const socialShareableListings = useMemo(
+    () => myListings.filter((item) => item.status === 'ACTIVE' && item.slug.trim().length > 0),
+    [myListings],
+  );
+  const selectedSocialListing = useMemo(
+    () => socialShareableListings.find((item) => String(item.id) === socialListingId) ?? null,
+    [socialListingId, socialShareableListings],
+  );
+  const selectedSocialPost = useMemo(
+    () => (selectedSocialListing ? buildSocialProductPost(selectedSocialListing) : null),
+    [selectedSocialListing],
+  );
+  const defaultSocialCaption = selectedSocialPost?.caption ?? '';
+
+  useEffect(() => {
+    setSocialCaption(defaultSocialCaption);
+    setSocialMessage('');
+    setSocialCaptionCopied(false);
+  }, [defaultSocialCaption]);
+
+  useEffect(() => {
+    const listing = selectedSocialListing;
+    if (!listing) {
+      setSocialPreview(null);
+      setSocialLoading(false);
+      setSocialPublic(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setSocialPreview(null);
+    setSocialLoading(true);
+    setSocialPublic(false);
+
+    void (async () => {
+      try {
+        const res = await fetch(API_BASE + '/listings/' + encodeURIComponent(listing.slug), {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const payload = (await res.json().catch(() => ({}))) as SocialListingDetail;
+        if (controller.signal.aborted) return;
+
+        if (!res.ok) {
+          setSocialMessage(
+            res.status === 404
+              ? 'Tin này hiện không còn hiển thị public nên chưa thể chia sẻ.'
+              : 'Không thể kiểm tra trạng thái public của tin. Vui lòng thử lại.',
+          );
+          return;
+        }
+        if (String(payload.status ?? '').toUpperCase() !== 'ACTIVE') {
+          setSocialMessage('Chỉ tin đang hoạt động và còn hiển thị public mới có thể chia sẻ.');
+          return;
+        }
+
+        const detailLocation = formatListingDisplayAddress(
+          payload.address
+            || [
+              readSocialLocationName(payload.ward),
+              readSocialLocationName(payload.district),
+              readSocialLocationName(payload.city) || 'TP Đà Nẵng',
+            ].filter(Boolean).join(', '),
+        );
+        const imageUrl = resolveSeoImageUrls({
+          images: payload.images,
+          coverImage: payload.coverImage,
+        })[0] ?? '';
+
+        setSocialPreview({
+          imageUrl,
+          location: detailLocation,
+        });
+        setSocialPublic(true);
+        setSocialMessage('Tin đã sẵn sàng để chia sẻ.');
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setSocialMessage('Không thể kiểm tra tin public. Vui lòng kiểm tra kết nối và thử lại.');
+      } finally {
+        if (!controller.signal.aborted) setSocialLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [selectedSocialListing]);
+
+  useEffect(() => {
+    setSocialListingId('');
+    setSocialCaption('');
+    setSocialMessage('');
+    setSocialPreview(null);
+    setSocialLoading(false);
+    setSocialPublic(false);
+    setSocialCaptionCopied(false);
+  }, [user?.id]);
+
+  function shareableSocialCaption(): string {
+    const caption = socialCaption.trim();
+    if (!selectedSocialPost) return caption;
+    if (caption.includes(selectedSocialPost.publicUrl)) return caption;
+    return [caption, 'Xem chi tiết: ' + selectedSocialPost.publicUrl].filter(Boolean).join('\n');
+  }
+
+  async function copySocialCaption(target?: string): Promise<boolean> {
+    const content = shareableSocialCaption();
+    if (!content) return false;
+    try {
+      await navigator.clipboard.writeText(content);
+      setSocialCaptionCopied(true);
+      setSocialMessage(
+        target
+          ? 'Đã sao chép nội dung cho ' + target + '.'
+          : 'Đã sao chép. Khi Facebook mở, hãy dán nội dung vào bài viết.',
+      );
+      return true;
+    } catch {
+      setSocialCaptionCopied(false);
+      setSocialMessage('Không thể sao chép tự động. Hãy chọn và sao chép nội dung trong ô bài viết.');
+      return false;
+    }
+  }
+
+  async function shareSocialPost() {
+    if (!selectedSocialPost || !socialPublic) return;
+    const content = shareableSocialCaption();
+    if (!content) return;
+    if (typeof navigator.share !== 'function') {
+      await copySocialCaption();
+      return;
+    }
+
+    try {
+      const shareText = content.replace(selectedSocialPost.publicUrl, '').trim();
+      await navigator.share({
+        title: selectedSocialListing?.title ?? 'Tin đăng NhadatDN',
+        text: shareText,
+        url: selectedSocialPost.publicUrl,
+      });
+      setSocialMessage('Đã mở bảng chia sẻ của thiết bị.');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setSocialMessage('Không thể mở bảng chia sẻ. Bạn có thể sao chép nội dung để đăng thủ công.');
+    }
+  }
+
+  function focusSocialListing(listing: MyListingItem) {
+    setSocialListingId(String(listing.id));
+    requestAnimationFrame(() => {
+      const widget = socialWidgetRef.current;
+      widget?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      widget?.focus({ preventScroll: true });
+    });
+  }
   async function exportMyListings() {
     if (!user) return;
     const params = new URLSearchParams();
@@ -1160,6 +1379,160 @@ export default function AccountHomePage() {
             </button>
           </div>
 
+          <section
+            ref={socialWidgetRef}
+            tabIndex={-1}
+            className="-mx-5 mt-4 scroll-mt-4 border-y border-sky-200 bg-sky-50/60 px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            aria-labelledby="social-product-post-title"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 id="social-product-post-title" className="text-base font-semibold text-slate-900">Bài viết sản phẩm mạng xã hội</h3>
+              <span className="text-xs font-medium text-slate-600">Facebook · Instagram · Ứng dụng khác</span>
+            </div>
+
+            <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+              <div className="space-y-3">
+                <select
+                  aria-label="Chọn tin đăng để tạo bài viết sản phẩm"
+                  className="min-h-11 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                  value={socialListingId}
+                  onChange={(event) => setSocialListingId(event.target.value)}
+                >
+                  <option value="">Chọn từ tất cả tin đang hoạt động</option>
+                  {socialShareableListings.map((item) => (
+                    <option key={item.id} value={item.id}>{item.title}</option>
+                  ))}
+                </select>
+
+                {socialShareableListings.length === 0 ? (
+                  <p className="text-sm text-slate-600">Chưa có tin đang hoạt động để chia sẻ.</p>
+                ) : null}
+
+                {socialLoading ? (
+                  <p className="text-sm text-slate-600" role="status">Đang kiểm tra tin public...</p>
+                ) : null}
+
+                {selectedSocialListing && socialPreview && socialPublic ? (
+                  <div className="flex gap-3 border-t border-sky-200 pt-3">
+                    {socialPreview.imageUrl ? (
+                      <img
+                        src={socialPreview.imageUrl}
+                        alt={'Ảnh tin ' + selectedSocialListing.title}
+                        className="h-20 w-24 shrink-0 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-24 shrink-0 items-center justify-center rounded bg-slate-200 px-2 text-center text-xs text-slate-500">
+                        Chưa có ảnh
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="line-clamp-2 text-sm font-semibold text-slate-900">{selectedSocialListing.title}</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {formatListingPrice(Number(selectedSocialListing.price), resolveListingDealType(selectedSocialListing))}
+                        {' · '}
+                        {formatAreaM2(Number(selectedSocialListing.area))}
+                      </p>
+                      {socialPreview.location ? <p className="mt-1 line-clamp-2 text-xs text-slate-500">{socialPreview.location}</p> : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {selectedSocialPost && socialPublic ? (
+                  <a
+                    href={selectedSocialPost.publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block break-all text-xs font-medium text-[var(--brand-primary-hover)] hover:underline"
+                  >
+                    {selectedSocialPost.publicUrl}
+                  </a>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <textarea
+                  aria-label="Nội dung bài viết sản phẩm"
+                  rows={7}
+                  className="w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none focus:border-[var(--brand-primary)] disabled:bg-slate-100"
+                  value={socialCaption}
+                  onChange={(event) => {
+                    setSocialCaption(event.target.value);
+                    setSocialCaptionCopied(false);
+                  }}
+                  disabled={!selectedSocialPost || !socialPublic}
+                  placeholder="Chọn tin đăng để tạo nội dung bài viết"
+                />
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400"
+                  onClick={() => {
+                    setSocialCaption(defaultSocialCaption);
+                    setSocialCaptionCopied(false);
+                    setSocialMessage('Đã khôi phục nội dung mặc định.');
+                  }}
+                  disabled={!selectedSocialPost || !socialPublic || socialCaption === defaultSocialCaption}
+                >
+                  Khôi phục nội dung mặc định
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="min-h-11 rounded bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                onClick={() => void shareSocialPost()}
+                disabled={!selectedSocialPost || !socialPublic || socialLoading || !socialCaption.trim()}
+              >
+                Chia sẻ qua thiết bị
+              </button>
+              <button
+                type="button"
+                className="min-h-11 rounded border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                onClick={() => void copySocialCaption()}
+                disabled={!selectedSocialPost || !socialPublic || socialLoading || !socialCaption.trim()}
+              >
+                {socialCaptionCopied ? 'Đã sao chép' : 'Sao chép nội dung'}
+              </button>
+              {selectedSocialPost && socialPublic ? (
+                <a
+                  href={selectedSocialPost.facebookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={'Mở Facebook để chia sẻ tin ' + (selectedSocialListing?.title ?? '')}
+                  onClick={() => {
+                    setSocialMessage(
+                      socialCaptionCopied
+                        ? 'Facebook đã mở. Hãy dán nội dung đã sao chép vào bài viết.'
+                        : 'Facebook đã mở. Hãy quay lại sao chép nội dung trước khi đăng.',
+                    );
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center rounded bg-[#1877f2] px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Mở Facebook
+                </a>
+              ) : (
+                <button type="button" disabled className="min-h-11 rounded bg-slate-300 px-4 py-2 text-sm font-semibold text-white">Mở Facebook</button>
+              )}
+              {selectedSocialPost && socialPublic ? (
+                <a
+                  href="https://www.instagram.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={'Mở Instagram để chia sẻ tin ' + (selectedSocialListing?.title ?? '')}
+                  onClick={() => void copySocialCaption('Instagram')}
+                  className="inline-flex min-h-11 items-center justify-center rounded border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Mở Instagram
+                </a>
+              ) : (
+                <button type="button" disabled className="min-h-11 rounded border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400">Mở Instagram</button>
+              )}
+            </div>
+
+            {socialMessage ? <p className="mt-2 text-xs text-slate-600" role="status">{socialMessage}</p> : null}
+          </section>
+
           {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}
 
           <div className="mt-4 overflow-x-auto">
@@ -1197,6 +1570,15 @@ export default function AccountHomePage() {
                       <td className="px-3 py-2 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString('vi-VN')}</td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center gap-2">
+                          {item.status === 'ACTIVE' && item.slug.trim() ? (
+                            <button
+                              type="button"
+                              className="h-9 shrink-0 rounded border border-sky-300 px-3 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                              onClick={() => focusSocialListing(item)}
+                            >
+                              Chia sẻ
+                            </button>
+                          ) : null}
                           {canEdit ? (
                             <button
                               type="button"

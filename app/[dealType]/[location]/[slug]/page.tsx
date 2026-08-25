@@ -1,4 +1,4 @@
-﻿import type { Metadata, Route } from 'next';
+import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { HeaderNav } from '@/components/header-nav';
@@ -136,6 +136,24 @@ function buildSeoDescription(detail: ListingDetail): string {
   return normalizeSeoText(`${prefix} ${summary}`).slice(0, 300);
 }
 
+function truncateSocialText(value: string, maxLength: number): string {
+  const normalized = normalizeSeoText(value);
+  if (normalized.length <= maxLength) return normalized;
+
+  const candidate = normalized.slice(0, maxLength + 1);
+  const boundary = candidate.lastIndexOf(' ');
+  const trimmed = (boundary >= Math.floor(maxLength * 0.7) ? candidate.slice(0, boundary) : candidate.slice(0, maxLength))
+    .replace(/[.,;:!?-]+$/g, '')
+    .trim();
+  return `${trimmed}…`;
+}
+
+function buildSocialDescription(detail: ListingDetail): string {
+  const dealType = resolveDealType(detail.title, (detail.dealType ?? detail.DealType ?? '').toString());
+  const summary = `Giá ${formatListingPrice(Number(detail.price), dealType)}, diện tích ${formatAreaM2(Number(detail.area))}, ${toLocation(detail)}. Xem hình ảnh và thông tin chi tiết tại NhadatDN.`;
+  return truncateSocialText(summary, 180);
+}
+
 function formatHouseDirection(direction?: string): string {
   const key = (direction ?? '').trim().toLowerCase();
   if (!key) return 'Đang cập nhật';
@@ -203,6 +221,8 @@ export async function generateMetadata({ params }: { params: { dealType: string;
   const images = resolveImages(listing);
   const primaryImage = images[0];
   const description = buildSeoDescription(listing);
+  const socialTitle = truncateSocialText(listing.title, 80);
+  const socialDescription = buildSocialDescription(listing);
   const wardName = compactLocationPart(listing.ward);
   const dealTypeHint = (listing.dealType ?? listing.DealType ?? '').toString();
   const canonicalDealType = resolveDealType(listing.title, dealTypeHint);
@@ -227,15 +247,15 @@ export async function generateMetadata({ params }: { params: { dealType: string;
     alternates: { canonical: path },
     openGraph: {
       type: 'article',
-      title,
-      description,
+      title: socialTitle,
+      description: socialDescription,
       url: absoluteUrl,
       images: images.slice(0, 3).map((url) => ({ url })),
     },
     twitter: {
       card: 'summary_large_image',
-      title: listing.title,
-      description,
+      title: socialTitle,
+      description: socialDescription,
       ...(primaryImage ? { images: [primaryImage] } : {}),
     },
   };
