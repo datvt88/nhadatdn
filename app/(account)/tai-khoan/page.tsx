@@ -59,6 +59,7 @@ type SessionPayload = { user?: AuthUser; sessionToken?: string; error?: string }
 type SocialListingDetail = {
   title?: string;
   status?: string;
+  description?: string;
   price?: number;
   area?: number;
   address?: string;
@@ -72,6 +73,10 @@ type SocialListingDetail = {
 type SocialListingPreview = {
   imageUrl: string;
   location: string;
+};
+type SocialListingDetailState = {
+  listingId: number;
+  detail: SocialListingDetail;
 };
 
 const USER_LISTING_EDIT_WINDOW_DAYS = 30;
@@ -88,7 +93,18 @@ function resolveListingDealType(item: Pick<MyListingItem, 'title' | 'dealType'>)
   return resolveDealType(item.title, item.dealType);
 }
 
-function buildSocialProductPost(item: MyListingItem): { publicUrl: string; facebookUrl: string; caption: string } {
+function normalizeSocialDescription(value?: string): string {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (normalized.length <= 900) return normalized;
+  const candidate = normalized.slice(0, 901);
+  const boundary = candidate.lastIndexOf(' ');
+  return `${candidate.slice(0, boundary >= 720 ? boundary : 900).trim()}…`;
+}
+
+function buildSocialProductPost(
+  item: MyListingItem,
+  detail?: SocialListingDetail,
+): { publicUrl: string; facebookUrl: string; caption: string } {
   const dealType = resolveListingDealType(item);
   const detailPath = buildListingPath({
     slug: item.slug,
@@ -98,18 +114,26 @@ function buildSocialProductPost(item: MyListingItem): { publicUrl: string; faceb
     categoryHint: dealType,
   });
   const publicUrl = new URL(detailPath, PUBLIC_SITE_URL).toString();
+  const title = detail?.title?.trim() || item.title.trim();
   const facts = [
-    'Giá: ' + formatListingPrice(Number(item.price), dealType),
-    'Diện tích: ' + formatAreaM2(Number(item.area)),
+    'Giá: ' + formatListingPrice(Number(detail?.price ?? item.price), dealType),
+    'Diện tích: ' + formatAreaM2(Number(detail?.area ?? item.area)),
     item.propertyType?.trim() || '',
   ].filter(Boolean);
   const location = formatListingDisplayAddress(
-    [item.wardName?.trim(), item.districtName?.trim(), 'TP Đà Nẵng'].filter(Boolean).join(', '),
+    detail?.address
+      || [
+        readSocialLocationName(detail?.ward) || item.wardName?.trim(),
+        readSocialLocationName(detail?.district) || item.districtName?.trim(),
+        readSocialLocationName(detail?.city) || 'TP Đà Nẵng',
+      ].filter(Boolean).join(', '),
   );
+  const description = normalizeSocialDescription(detail?.description);
   const caption = [
-    item.title.trim(),
+    title,
     facts.join(' | '),
     location ? 'Khu vực: ' + location : '',
+    description,
     'Xem chi tiết: ' + publicUrl,
     '#NhadatDN #NhaDatDaNang',
   ].filter(Boolean).join('\n');
@@ -124,6 +148,37 @@ function buildSocialProductPost(item: MyListingItem): { publicUrl: string; faceb
 function readSocialLocationName(value?: string | { name?: string }): string {
   if (typeof value === 'string') return value.trim();
   return String(value?.name ?? '').trim();
+}
+
+function buildSocialShareImageUrl(imageUrl: string): string {
+  const params = new URLSearchParams({ url: imageUrl, w: '1200', q: '82' });
+  return `/_next/image?${params.toString()}`;
+}
+
+async function loadSocialShareImageFile(imageUrl: string, listingId: number, signal: AbortSignal): Promise<File> {
+  const response = await fetch(buildSocialShareImageUrl(imageUrl), {
+    cache: 'force-cache',
+    credentials: 'omit',
+    headers: { accept: 'image/jpeg,image/png,image/webp' },
+    signal,
+  });
+  if (!response.ok) throw new Error(`share image failed with status ${response.status}`);
+
+  const blob = await response.blob();
+  const mimeType = blob.type.toLowerCase();
+  const extensions: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  };
+  const extension = extensions[mimeType];
+  if (!extension || blob.size === 0 || blob.size > 8 * 1024 * 1024) {
+    throw new Error('share image is invalid');
+  }
+  return new File([blob], `nhadatdn-listing-${listingId}.${extension}`, {
+    type: mimeType,
+    lastModified: Date.now(),
+  });
 }
 
 function statusOptionsForListing(item: Pick<MyListingItem, 'title' | 'dealType'>): Array<{ value: 'ACTIVE' | 'SOLD' | 'RENTED'; label: string }> {
@@ -286,7 +341,10 @@ export default function AccountHomePage() {
   const [socialCaption, setSocialCaption] = useState('');
   const [socialMessage, setSocialMessage] = useState('');
   const [socialPreview, setSocialPreview] = useState<SocialListingPreview | null>(null);
+  const [socialDetail, setSocialDetail] = useState<SocialListingDetailState | null>(null);
+  const [socialShareImageFile, setSocialShareImageFile] = useState<File | null>(null);
   const [socialLoading, setSocialLoading] = useState(false);
+  const [socialPreparingShare, setSocialPreparingShare] = useState(false);
   const [socialPublic, setSocialPublic] = useState(false);
   const [socialCaptionCopied, setSocialCaptionCopied] = useState(false);
   const [statusById, setStatusById] = useState<Record<number, string>>({});
@@ -613,8 +671,13 @@ export default function AccountHomePage() {
     [socialListingId, socialShareableListings],
   );
   const selectedSocialPost = useMemo(
-    () => (selectedSocialListing ? buildSocialProductPost(selectedSocialListing) : null),
-    [selectedSocialListing],
+    () => (selectedSocialListing
+      ? buildSocialProductPost(
+          selectedSocialListing,
+          socialDetail?.listingId === selectedSocialListing.id ? socialDetail.detail : undefined,
+        )
+      : null),
+    [selectedSocialListing, socialDetail],
   );
   const defaultSocialCaption = selectedSocialPost?.caption ?? '';
 
@@ -628,6 +691,8 @@ export default function AccountHomePage() {
     const listing = selectedSocialListing;
     if (!listing) {
       setSocialPreview(null);
+      setSocialDetail(null);
+      setSocialShareImageFile(null);
       setSocialLoading(false);
       setSocialPublic(false);
       return;
@@ -635,6 +700,8 @@ export default function AccountHomePage() {
 
     const controller = new AbortController();
     setSocialPreview(null);
+    setSocialDetail(null);
+    setSocialShareImageFile(null);
     setSocialLoading(true);
     setSocialPublic(false);
 
@@ -672,13 +739,28 @@ export default function AccountHomePage() {
           images: payload.images,
           coverImage: payload.coverImage,
         })[0] ?? '';
+        let shareImageFile: File | null = null;
+        if (imageUrl) {
+          try {
+            shareImageFile = await loadSocialShareImageFile(imageUrl, listing.id, controller.signal);
+          } catch {
+            shareImageFile = null;
+          }
+        }
+        if (controller.signal.aborted) return;
 
         setSocialPreview({
           imageUrl,
           location: detailLocation,
         });
+        setSocialDetail({ listingId: listing.id, detail: payload });
+        setSocialShareImageFile(shareImageFile);
         setSocialPublic(true);
-        setSocialMessage('Tin đã sẵn sàng để chia sẻ.');
+        setSocialMessage(
+          shareImageFile
+            ? 'Tin đã sẵn sàng với nội dung và ảnh để chia sẻ.'
+            : 'Tin đã sẵn sàng. Ứng dụng sẽ nhận nội dung, link và ảnh xem trước khi hỗ trợ.',
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setSocialMessage('Không thể kiểm tra tin public. Vui lòng kiểm tra kết nối và thử lại.');
@@ -695,7 +777,10 @@ export default function AccountHomePage() {
     setSocialCaption('');
     setSocialMessage('');
     setSocialPreview(null);
+    setSocialDetail(null);
+    setSocialShareImageFile(null);
     setSocialLoading(false);
+    setSocialPreparingShare(false);
     setSocialPublic(false);
     setSocialCaptionCopied(false);
   }, [user?.id]);
@@ -735,17 +820,46 @@ export default function AccountHomePage() {
       return;
     }
 
+    setSocialPreparingShare(true);
+    setSocialMessage('Đang chuẩn bị nội dung và ảnh...');
+    let sharedWithImage = false;
     try {
-      const shareText = content.replace(selectedSocialPost.publicUrl, '').trim();
-      await navigator.share({
+      let shareData: ShareData = {
         title: selectedSocialListing?.title ?? 'Tin đăng NhadatDN',
-        text: shareText,
+        text: content,
         url: selectedSocialPost.publicUrl,
-      });
-      setSocialMessage('Đã mở bảng chia sẻ của thiết bị.');
+      };
+
+      if (socialShareImageFile && typeof navigator.canShare === 'function') {
+        try {
+          const files = [socialShareImageFile];
+          if (navigator.canShare({ files })) {
+            shareData = {
+              title: selectedSocialListing?.title ?? 'Tin đăng NhadatDN',
+              text: content,
+              files,
+            };
+            sharedWithImage = true;
+          }
+        } catch {
+          sharedWithImage = false;
+        }
+      }
+
+      await navigator.share(shareData);
+      setSocialMessage(
+        sharedWithImage
+          ? 'Đã mở ứng dụng chia sẻ với nội dung, link và ảnh tin đăng.'
+          : 'Đã mở ứng dụng chia sẻ với nội dung và link. Ảnh xem trước được lấy từ trang tin khi ứng dụng hỗ trợ.',
+      );
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      setSocialMessage('Không thể mở bảng chia sẻ. Bạn có thể sao chép nội dung để đăng thủ công.');
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setSocialMessage('Đã hủy chia sẻ. Nội dung vẫn được giữ nguyên.');
+        return;
+      }
+      setSocialMessage('Không thể mở ứng dụng chia sẻ. Bạn có thể sao chép nội dung để đăng thủ công.');
+    } finally {
+      setSocialPreparingShare(false);
     }
   }
 
@@ -1409,7 +1523,7 @@ export default function AccountHomePage() {
                 ) : null}
 
                 {socialLoading ? (
-                  <p className="text-sm text-slate-600" role="status">Đang kiểm tra tin public...</p>
+                  <p className="text-sm text-slate-600" role="status">Đang tải nội dung và chuẩn bị ảnh...</p>
                 ) : null}
 
                 {selectedSocialListing && socialPreview && socialPublic ? (
@@ -1482,9 +1596,9 @@ export default function AccountHomePage() {
                 type="button"
                 className="min-h-11 rounded bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                 onClick={() => void shareSocialPost()}
-                disabled={!selectedSocialPost || !socialPublic || socialLoading || !socialCaption.trim()}
+                disabled={!selectedSocialPost || !socialPublic || socialLoading || socialPreparingShare || !socialCaption.trim()}
               >
-                Chia sẻ qua thiết bị
+                {socialPreparingShare ? 'Đang chuẩn bị...' : 'Chia sẻ qua ứng dụng'}
               </button>
               <button
                 type="button"
