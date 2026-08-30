@@ -337,6 +337,8 @@ export default function AccountHomePage() {
   const [showSignupBeanWelcome, setShowSignupBeanWelcome] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [myListings, setMyListings] = useState<MyListingItem[]>([]);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const [listingsError, setListingsError] = useState('');
   const [socialListingId, setSocialListingId] = useState('');
   const [socialCaption, setSocialCaption] = useState('');
   const [socialMessage, setSocialMessage] = useState('');
@@ -359,10 +361,12 @@ export default function AccountHomePage() {
   const [profileBio, setProfileBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [editingDraft, setEditingDraft] = useState<EditListingDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingListingId, setDeletingListingId] = useState<number | null>(null);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
   const [editUploading, setEditUploading] = useState(false);
   const [editDragActive, setEditDragActive] = useState(false);
   const [editAddressSuggestions, setEditAddressSuggestions] = useState<AddressSuggestion[]>([]);
@@ -371,6 +375,7 @@ export default function AccountHomePage() {
   const socialWidgetRef = useRef<HTMLElement | null>(null);
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
+  const editDialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const syncUser = (): void => {
@@ -392,39 +397,49 @@ export default function AccountHomePage() {
     setFullName(user?.fullName ?? '');
   }, [user?.fullName]);
 
-  async function loadMyListings(currentUser: AuthUser) {
-    const res = await fetch(`${API_BASE}/users/${currentUser.id}/listings?limit=500`, {
-      cache: 'no-store',
-      credentials: 'include',
-      headers: authHeaders(currentUser),
-    });
+  async function loadMyListings(currentUser: AuthUser, signal?: AbortSignal) {
+    setListingsLoading(true);
+    setListingsError('');
+    try {
+      const res = await fetch(`${API_BASE}/users/${currentUser.id}/listings?limit=500`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: authHeaders(currentUser),
+        ...(signal ? { signal } : {}),
+      });
 
-    const payload = (await res.json().catch(() => ({}))) as { items?: MyListingItem[]; error?: string };
-    if (!res.ok) {
-      if (isExpiredSessionError(payload.error)) {
-        writeAuthUser(null);
-        setUser(null);
-        router.replace('/dang-nhap?next=/tai-khoan');
+      const payload = (await res.json().catch(() => ({}))) as { items?: MyListingItem[]; error?: string };
+      if (!res.ok) {
+        if (isExpiredSessionError(payload.error)) {
+          writeAuthUser(null);
+          setUser(null);
+          router.replace('/dang-nhap?next=/tai-khoan');
+          return;
+        }
+        setListingsError(`Không thể tải tin đăng: ${String(payload.error ?? 'unknown')}`);
         return;
       }
-      setMessage(`Lỗi tải tin của bạn: ${String(payload.error ?? 'unknown')}`);
-      return;
+
+      const items = payload.items ?? [];
+      setMyListings(items);
+      const defaults: Record<number, string> = {};
+      items.forEach((item) => {
+        defaults[item.id] = item.status;
+      });
+      setStatusById(defaults);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setListingsError('Không thể kết nối backend để tải tin đăng. Vui lòng thử lại.');
+    } finally {
+      if (!signal?.aborted) setListingsLoading(false);
     }
-
-    const items = payload.items ?? [];
-    setMyListings(items);
-    const defaults: Record<number, string> = {};
-    items.forEach((item) => {
-      defaults[item.id] = item.status;
-    });
-    setStatusById(defaults);
   }
-
-  async function loadTrackingSettings(currentUser: AuthUser) {
+  async function loadTrackingSettings(currentUser: AuthUser, signal?: AbortSignal) {
     const res = await fetch(`${API_BASE}/users/${currentUser.id}/settings`, {
       cache: 'no-store',
       credentials: 'include',
       headers: authHeaders(currentUser),
+      ...(signal ? { signal } : {}),
     });
     const payload = (await res.json().catch(() => ({}))) as { fullName?: string; contactPhone?: string; phoneVerified?: boolean; googleTrackingKey?: string; facebookTrackingKey?: string; bio?: string; avatarUrl?: string; error?: string };
     if (!res.ok) {
@@ -461,11 +476,19 @@ export default function AccountHomePage() {
   }
 
   useEffect(() => {
-    if (user) {
-      void loadMyListings(user);
-      void loadTrackingSettings(user);
+    if (!user) {
+      setMyListings([]);
+      setListingsLoading(false);
+      return;
     }
-  }, [user]);
+    const controller = new AbortController();
+    void loadMyListings(user, controller.signal);
+    void loadTrackingSettings(user, controller.signal).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMessage('Không thể tải thông tin tài khoản. Vui lòng thử lại.');
+    });
+    return () => controller.abort();
+  }, [user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -594,28 +617,41 @@ export default function AccountHomePage() {
   }, [editingDraft?.address, danangCatalog]);
 
   async function saveTrackingSettings() {
-    if (!user) return;
-    const res = await fetch(`${API_BASE}/users/${user.id}/settings`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: {
-        'content-type': 'application/json',
-        ...authHeaders(user),
-      },
-      body: JSON.stringify({ fullName, contactPhone: zaloPhone, googleTrackingKey, facebookTrackingKey, bio: profileBio }),
-    });
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) {
-      setMessage(`Lỗi lưu tracking key: ${String(payload.error ?? 'unknown')}`);
-      return;
+    if (!user || settingsSaving) return;
+    setSettingsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/${user.id}/settings`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({ fullName, contactPhone: zaloPhone, googleTrackingKey, facebookTrackingKey, bio: profileBio }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setMessage(`Lỗi lưu thông tin tài khoản: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+      const normalizedPhone = zaloPhone.trim();
+      const phoneChanged = normalizedPhone !== String(user.phone ?? '').trim();
+      const nextUser: AuthUser = {
+        ...user,
+        fullName: fullName.trim() || user.fullName,
+        phone: normalizedPhone,
+        phoneVerified: phoneChanged ? false : Boolean(user.phoneVerified),
+      };
+      writeAuthUser(nextUser);
+      setUser(nextUser);
+      setPhoneVerified(Boolean(nextUser.phoneVerified));
+      setMessage('Đã lưu thông tin tài khoản thành công.');
+    } catch {
+      setMessage('Không thể kết nối backend để lưu thông tin. Vui lòng thử lại.');
+    } finally {
+      setSettingsSaving(false);
     }
-    const nextUser: AuthUser = { ...user, fullName: fullName.trim() || user.fullName, phone: zaloPhone.trim(), phoneVerified: false };
-    writeAuthUser(nextUser);
-    setUser(nextUser);
-    setPhoneVerified(false);
-    setMessage('Đã lưu thông tin tài khoản thành công.');
   }
-
   async function uploadAvatar(file: File) {
     if (!user) return;
     if (!file.type.startsWith('image/')) {
@@ -653,6 +689,20 @@ export default function AccountHomePage() {
       }
     }
   }
+  useEffect(() => {
+    if (!editingDraft || typeof document === 'undefined') return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setEditingDraft(null);
+    };
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleKeyDown);
+    requestAnimationFrame(() => editDialogRef.current?.focus());
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [editingDraft?.id]);
   const filteredMyListings = useMemo(() => {
     return myListings.filter((item) => {
       if (viewStatus !== 'all' && toViewStatus(item) !== viewStatus) {
@@ -661,6 +711,11 @@ export default function AccountHomePage() {
       return inDateRange(item, fromDate, toDate);
     });
   }, [myListings, viewStatus, fromDate, toDate]);
+  const listingSummary = useMemo(() => ({
+    total: myListings.length,
+    active: myListings.filter((item) => item.status === 'ACTIVE').length,
+    completed: myListings.filter((item) => item.status === 'SOLD' || item.status === 'RENTED').length,
+  }), [myListings]);
 
   const socialShareableListings = useMemo(
     () => myListings.filter((item) => item.status === 'ACTIVE' && item.slug.trim().length > 0),
@@ -900,31 +955,40 @@ export default function AccountHomePage() {
   }
 
   async function updateMyListingStatus(listing: MyListingItem) {
-    if (!user) {
-      return;
-    }
+    if (!user || statusUpdatingId !== null) return;
 
     const nextStatus = statusById[listing.id] ?? listing.status;
-    const res = await fetch(`${API_BASE}/users/${user.id}/listings/${listing.id}/status`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: {
-        'content-type': 'application/json',
-        ...authHeaders(user),
-      },
-      body: JSON.stringify({ status: nextStatus }),
-    });
-
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) {
-      setMessage(`Lỗi cập nhật trạng thái tin #${listing.id}: ${String(payload.error ?? 'unknown')}`);
+    if (nextStatus === listing.status) {
+      setMessage(`Trạng thái tin #${listing.id} chưa thay đổi.`);
       return;
     }
 
-    setMessage(`Đã cập nhật trạng thái tin #${listing.id}`);
-    await loadMyListings(user);
-  }
+    setStatusUpdatingId(listing.id);
+    try {
+      const res = await fetch(`${API_BASE}/users/${user.id}/listings/${listing.id}/status`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          ...authHeaders(user),
+        },
+        body: JSON.stringify({ status: nextStatus }),
+      });
 
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setMessage(`Lỗi cập nhật trạng thái tin #${listing.id}: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
+
+      setMessage(`Đã cập nhật trạng thái tin #${listing.id}`);
+      await loadMyListings(user);
+    } catch {
+      setMessage(`Không thể kết nối backend để cập nhật tin #${listing.id}.`);
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  }
   async function ensureActiveSession(currentUser: AuthUser | null, reason: 'upload' | 'edit' | 'delete'): Promise<AuthUser | null> {
     if (!currentUser) {
       setMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
@@ -1171,7 +1235,8 @@ export default function AccountHomePage() {
     }
 
     setSavingEdit(true);
-    const res = await fetch(`${API_BASE}/users/${activeUser.id}/listings/${editingDraft.id}`, {
+    try {
+      const res = await fetch(`${API_BASE}/users/${activeUser.id}/listings/${editingDraft.id}`, {
       method: 'PATCH',
       credentials: 'include',
       headers: {
@@ -1199,12 +1264,11 @@ export default function AccountHomePage() {
         images: editingDraft.images.map((item) => ({ url: item.url })),
       }),
     });
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    setSavingEdit(false);
-    if (!res.ok) {
-      setMessage(`Lỗi sửa tin #${editingDraft.id}: ${String(payload.error ?? 'unknown')}`);
-      return;
-    }
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setMessage(`Lỗi sửa tin #${editingDraft.id}: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
 
     setEditingDraft(null);
     setMessage(`Đã cập nhật tin #${editingDraft.id}`);
@@ -1218,7 +1282,12 @@ export default function AccountHomePage() {
       writeAuthUser(nextUser);
       return nextUser;
     });
-    await loadMyListings(activeUser);
+      await loadMyListings(activeUser);
+    } catch {
+      setMessage(`Không thể kết nối backend để sửa tin #${editingDraft.id}.`);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function deleteListing(listing: MyListingItem) {
@@ -1232,23 +1301,102 @@ export default function AccountHomePage() {
     if (!activeUser) return;
 
     setDeletingListingId(listing.id);
-    const res = await fetch(`${API_BASE}/users/${activeUser.id}/listings/${listing.id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: authHeaders(activeUser),
-    });
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    setDeletingListingId(null);
-    if (!res.ok) {
-      setMessage(`Lỗi xóa tin #${listing.id}: ${String(payload.error ?? 'unknown')}`);
-      return;
-    }
+    try {
+      const res = await fetch(`${API_BASE}/users/${activeUser.id}/listings/${listing.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: authHeaders(activeUser),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setMessage(`Lỗi xóa tin #${listing.id}: ${String(payload.error ?? 'unknown')}`);
+        return;
+      }
 
-    setEditingDraft((prev) => (prev?.id === listing.id ? null : prev));
-    setMessage(`Đã xóa tin #${listing.id}`);
-    await loadMyListings(activeUser);
+      setEditingDraft((prev) => (prev?.id === listing.id ? null : prev));
+      setMessage(`Đã xóa tin #${listing.id}`);
+      await loadMyListings(activeUser);
+    } catch {
+      setMessage(`Không thể kết nối backend để xóa tin #${listing.id}.`);
+    } finally {
+      setDeletingListingId(null);
+    }
+  }
+  function userListingPath(item: MyListingItem): string {
+    return buildListingPath({
+      slug: item.slug,
+      title: item.title,
+      categoryHint: resolveListingDealType(item),
+      ...(item.districtName ? { district: item.districtName } : {}),
+      ...(item.wardName ? { ward: item.wardName } : {}),
+    });
   }
 
+  function renderListingActions(item: MyListingItem, mobile = false) {
+    const options = statusOptionsForListing(item);
+    const canEdit = isListingEditable(item.createdAt);
+    const editDeadline = formatEditDeadline(item.createdAt);
+    const selectedStatus = statusById[item.id] ?? item.status;
+    const controlClassName = mobile ? 'min-h-11 w-full' : 'h-9 shrink-0';
+
+    return (
+      <div className={mobile ? 'grid grid-cols-2 gap-2' : 'flex flex-wrap items-center gap-2'}>
+        {item.status === 'ACTIVE' && item.slug.trim() ? (
+          <button
+            type="button"
+            className={`${controlClassName} rounded border border-sky-300 px-3 text-sm font-semibold text-sky-700 hover:bg-sky-50`}
+            onClick={() => focusSocialListing(item)}
+            aria-label={`Chia sẻ tin ${item.title}`}
+          >
+            Chia sẻ
+          </button>
+        ) : null}
+        {canEdit ? (
+          <button
+            type="button"
+            className={`${controlClassName} rounded border border-slate-300 px-3 text-sm text-slate-700 hover:bg-slate-50`}
+            onClick={() => void openEditListing(item)}
+            aria-label={`Sửa tin ${item.title}`}
+          >
+            Sửa
+          </button>
+        ) : (
+          <span className={`${mobile ? 'col-span-2' : ''} self-center text-xs text-slate-500`}>Hết hạn sửa (đến {editDeadline})</span>
+        )}
+        <label className={mobile ? 'col-span-2' : ''}>
+          <span className="sr-only">Trạng thái tin {item.title}</span>
+          <select
+            className={`${controlClassName} ${mobile ? '' : 'w-[132px]'} rounded border border-slate-300 px-2 text-sm`}
+            value={selectedStatus}
+            onChange={(event) => setStatusById((prev) => ({ ...prev, [item.id]: event.target.value }))}
+            disabled={statusUpdatingId === item.id}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className={`${controlClassName} rounded bg-[var(--brand-primary)] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300`}
+          onClick={() => void updateMyListingStatus(item)}
+          disabled={statusUpdatingId !== null || selectedStatus === item.status}
+          aria-label={`Cập nhật trạng thái tin ${item.title}`}
+        >
+          {statusUpdatingId === item.id ? 'Đang cập nhật...' : 'Cập nhật'}
+        </button>
+        <button
+          type="button"
+          className={`${controlClassName} rounded border border-red-300 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60`}
+          onClick={() => void deleteListing(item)}
+          disabled={deletingListingId !== null}
+          aria-label={`Xóa tin ${item.title}`}
+        >
+          {deletingListingId === item.id ? 'Đang xóa...' : 'Xóa'}
+        </button>
+      </div>
+    );
+  }
   if (!hydrated) {
     return (
       <main>
@@ -1265,9 +1413,21 @@ export default function AccountHomePage() {
   return (
     <main>
       <HeaderNav />
-      <section className="mx-auto max-w-5xl px-6 py-8">
+      {message ? (
+        <div role="status" aria-live="polite" className="fixed bottom-4 left-4 right-4 z-40 flex items-start justify-between gap-3 rounded-lg border border-slate-300 bg-slate-900 px-4 py-3 text-sm text-white shadow-lg sm:left-auto sm:max-w-md">
+          <span>{message}</span>
+          <button type="button" onClick={() => setMessage('')} className="shrink-0 px-1 font-semibold text-white" aria-label="Đóng thông báo">X</button>
+        </div>
+      ) : null}
+      <section className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
         <h1 className="text-2xl font-semibold text-slate-900">Hồ sơ người dùng</h1>
         <p className="mt-2 text-slate-600">Quản lý thông tin tài khoản, Bean và toàn bộ tin bạn đã đăng.</p>
+        <nav aria-label="Điều hướng hồ sơ" className="mt-5 flex gap-1 overflow-x-auto border-y border-slate-200 py-2">
+          <a href="#ho-so" className="min-h-11 shrink-0 rounded px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-white">Hồ sơ</a>
+          <a href="#tin-dang" className="min-h-11 shrink-0 rounded px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-white">Tin đăng</a>
+          <a href="#chia-se" className="min-h-11 shrink-0 rounded px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-white">Chia sẻ</a>
+          <a href="#cai-dat" className="min-h-11 shrink-0 rounded px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-white">Cài đặt</a>
+        </nav>
 
         {showSignupBeanWelcome ? (
           <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm">
@@ -1294,13 +1454,14 @@ export default function AccountHomePage() {
         ) : null}
 
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <article id="ho-so" className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:col-span-2">
             <h2 className="text-lg font-semibold text-slate-900">Thông tin tài khoản</h2>
             <dl className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg bg-slate-50 p-3">
-                <dt className="text-xs uppercase tracking-wide text-slate-500">Họ tên</dt>
+                <dt><label htmlFor="account-full-name" className="text-xs uppercase tracking-wide text-slate-500">Họ tên</label></dt>
                 <dd className="mt-1">
                   <input
+                    id="account-full-name"
                     className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -1310,7 +1471,7 @@ export default function AccountHomePage() {
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
                 <dt className="text-xs uppercase tracking-wide text-slate-500">Email</dt>
-                <dd className="mt-1 text-sm font-medium text-slate-900">{user.email}</dd>
+                <dd className="mt-1 break-all text-sm font-medium text-slate-900">{user.email}</dd>
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
                 <dt className="text-xs uppercase tracking-wide text-slate-500">Vai trò</dt>
@@ -1322,17 +1483,11 @@ export default function AccountHomePage() {
               </div>
             </dl>
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <label className="mb-2 block text-xs uppercase tracking-wide text-slate-500">Ảnh đại diện trang bio</label>
+              <span className="mb-2 block text-xs uppercase tracking-wide text-slate-500">Ảnh đại diện trang bio</span>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-xl font-semibold text-slate-500">
                   {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={`Ảnh đại diện ${fullName || user.fullName}`}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    <img src={avatarUrl} alt={`Ảnh đại diện ${fullName || user.fullName}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <span aria-hidden="true">{(fullName || user.fullName || user.email || 'N').trim().charAt(0).toUpperCase()}</span>
                   )}
@@ -1350,22 +1505,22 @@ export default function AccountHomePage() {
                   />
                   <button
                     type="button"
-                    className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => avatarFileInputRef.current?.click()}
                     disabled={avatarUploading}
                   >
                     {avatarUploading ? 'Đang upload...' : avatarUrl ? 'Đổi ảnh đại diện' : 'Upload ảnh đại diện'}
                   </button>
-                  <p className="mt-2 text-xs text-slate-500">
-                    Nếu đăng nhập bằng Google, hệ thống tự dùng ảnh Google khi bạn chưa upload avatar riêng. Ảnh upload sẽ được tối ưu 512px để hiển thị nhanh trên card và trang bio.
-                  </p>
+                  <p className="mt-2 text-xs text-slate-500">Ảnh upload sẽ được tối ưu 512px để hiển thị nhanh trên card và trang bio.</p>
                 </div>
               </div>
             </div>
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <label className="mb-1 block text-xs uppercase tracking-wide text-slate-500">Số điện thoại (Zalo)</label>
+              <label htmlFor="account-zalo-phone" className="mb-1 block text-xs uppercase tracking-wide text-slate-500">Số điện thoại (Zalo)</label>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
+                  id="account-zalo-phone"
+                  inputMode="tel"
                   className="w-full rounded border border-slate-300 bg-white px-3 py-2"
                   placeholder="Nhập số điện thoại Zalo"
                   value={zaloPhone}
@@ -1374,9 +1529,10 @@ export default function AccountHomePage() {
                 <button
                   type="button"
                   onClick={() => void saveTrackingSettings()}
-                  className="rounded bg-slate-900 px-4 py-2 text-white"
+                  className="min-h-11 shrink-0 rounded bg-slate-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={settingsSaving}
                 >
-                  Lưu thông tin
+                  {settingsSaving ? 'Đang lưu...' : 'Lưu thông tin'}
                 </button>
               </div>
               <p className="mt-2 text-xs text-slate-500">
@@ -1387,8 +1543,9 @@ export default function AccountHomePage() {
               </p>
             </div>
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <label className="mb-1 block text-xs uppercase tracking-wide text-slate-500">Giới thiệu ngắn trên trang bio cá nhân</label>
+              <label htmlFor="account-profile-bio" className="mb-1 block text-xs uppercase tracking-wide text-slate-500">Giới thiệu ngắn trên trang bio cá nhân</label>
               <textarea
+                id="account-profile-bio"
                 className="min-h-[96px] w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 placeholder="Ví dụ: Chuyên nhà đất Đà Nẵng, hỗ trợ xem nhà và kiểm tra pháp lý."
                 value={profileBio}
@@ -1398,7 +1555,6 @@ export default function AccountHomePage() {
               <p className="mt-1 text-xs text-slate-500">{profileBio.length}/300 ký tự. Nội dung này sẽ hiển thị công khai tại trang bio người đăng.</p>
             </div>
           </article>
-
           <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-emerald-900">Số dư Bean</h2>
             <p className="mt-3 text-3xl font-bold text-emerald-700">{user.beanBalance}</p>
@@ -1419,24 +1575,30 @@ export default function AccountHomePage() {
           </article>
         </div>
 
-        <article className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article id="cai-dat" className="mt-6 scroll-mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-lg font-semibold text-slate-900">Cài đặt tài khoản & tracking quảng cáo</h2>
           <p className="mt-1 text-sm text-slate-600">Mỗi tài khoản có key riêng để đánh giá hiệu quả quảng cáo Google/Facebook.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              className="rounded border border-slate-300 px-3 py-2"
-              placeholder="Google Tracking Key"
-              value={googleTrackingKey}
-              onChange={(e) => setGoogleTrackingKey(e.target.value)}
-            />
-            <input
-              className="rounded border border-slate-300 px-3 py-2"
-              placeholder="Facebook Tracking Key"
-              value={facebookTrackingKey}
-              onChange={(e) => setFacebookTrackingKey(e.target.value)}
-            />
+            <label className="text-sm font-medium text-slate-700">
+              Google Tracking Key
+              <input
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-normal text-slate-900"
+                placeholder="Nhập Google Tracking Key"
+                value={googleTrackingKey}
+                onChange={(e) => setGoogleTrackingKey(e.target.value)}
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Facebook Tracking Key
+              <input
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-normal text-slate-900"
+                placeholder="Nhập Facebook Tracking Key"
+                value={facebookTrackingKey}
+                onChange={(e) => setFacebookTrackingKey(e.target.value)}
+              />
+            </label>
           </div>
-          <button type="button" onClick={() => void saveTrackingSettings()} className="mt-3 rounded bg-slate-900 px-4 py-2 text-white">Lưu cài đặt tài khoản</button>
+          <button type="button" onClick={() => void saveTrackingSettings()} disabled={settingsSaving} className="mt-3 min-h-11 rounded bg-slate-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60">{settingsSaving ? 'Đang lưu...' : 'Lưu cài đặt tài khoản'}</button>
         </article>
 
         <article className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1465,9 +1627,12 @@ export default function AccountHomePage() {
           </div>
         </article>
 
-        <article className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article id="tin-dang" className="mt-6 scroll-mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-900">Tin đăng của tôi</h2>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Tin đăng của tôi</h2>
+              <p className="mt-1 text-sm text-slate-600">{listingSummary.active} đang hoạt động · {listingSummary.completed} đã giao dịch · {listingSummary.total} tổng cộng</p>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="rounded border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => void exportMyListings()}>
                 Xuất CSV Google Ads
@@ -1479,21 +1644,22 @@ export default function AccountHomePage() {
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-4">
-            <select className="rounded border border-slate-300 px-2 py-2" value={viewStatus} onChange={(e) => setViewStatus(e.target.value as ViewStatus)}>
+            <select aria-label="Lọc tin theo trạng thái" className="min-h-11 rounded border border-slate-300 px-2 py-2" value={viewStatus} onChange={(e) => setViewStatus(e.target.value as ViewStatus)}>
               <option value="all">Tất cả trạng thái</option>
               <option value="active-sale">Đang bán</option>
               <option value="sold">Đã bán</option>
               <option value="active-rent">Đang cho thuê</option>
               <option value="rented">Đã cho thuê</option>
             </select>
-            <input type="date" className="rounded border border-slate-300 px-2 py-2" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            <input type="date" className="rounded border border-slate-300 px-2 py-2" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-            <button type="button" className="rounded border border-slate-300 px-2 py-2 text-sm" onClick={() => { setViewStatus('all'); setFromDate(''); setToDate(''); }}>
+            <input type="date" aria-label="Ngày đăng từ" className="min-h-11 rounded border border-slate-300 px-2 py-2" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            <input type="date" aria-label="Ngày đăng đến" className="min-h-11 rounded border border-slate-300 px-2 py-2" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            <button type="button" className="min-h-11 rounded border border-slate-300 px-2 py-2 text-sm" onClick={() => { setViewStatus('all'); setFromDate(''); setToDate(''); }}>
               Xóa lọc
             </button>
           </div>
 
           <section
+            id="chia-se"
             ref={socialWidgetRef}
             tabIndex={-1}
             className="-mx-5 mt-4 scroll-mt-4 border-y border-sky-200 bg-sky-50/60 px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
@@ -1647,9 +1813,48 @@ export default function AccountHomePage() {
             {socialMessage ? <p className="mt-2 text-xs text-slate-600" role="status">{socialMessage}</p> : null}
           </section>
 
-          {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}
++
++
 
-          <div className="mt-4 overflow-x-auto">
+
+          {listingsError ? (
+            <div className="mt-4 flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:flex-row sm:items-center sm:justify-between" role="alert">
+              <span>{listingsError}</span>
+              <button type="button" className="min-h-11 shrink-0 rounded border border-red-300 bg-white px-3 font-semibold" onClick={() => void loadMyListings(user)}>
+                Thử lại
+              </button>
+            </div>
+          ) : null}
+          {listingsLoading ? <p className="mt-4 text-sm text-slate-600" role="status">Đang tải danh sách tin đăng...</p> : null}
+
+          <div className="mt-4 divide-y divide-slate-200 md:hidden">
+            {!listingsLoading && !listingsError ? filteredMyListings.map((item) => {
+              const dealType = resolveListingDealType(item);
+              return (
+                <article key={item.id} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <a href={userListingPath(item)} className="line-clamp-2 font-semibold text-slate-900 hover:text-[var(--brand-primary-hover)]">{item.title}</a>
+                      <p className="mt-1 text-xs text-slate-500">Tin #{item.id} · {new Date(item.createdAt).toLocaleDateString('vi-VN')}</p>
+                    </div>
+                    <span className="shrink-0 rounded bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-800">{listingStatusLabel(item.status, dealType)}</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                    <span>{shouldShowVipBadge(item.packageType) ? packageBadgeLabel(item.packageType) : 'Tin thường'}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatListingPrice(Number(item.price), dealType)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatAreaM2(Number(item.area))}</span>
+                  </div>
+                  <div className="mt-3">{renderListingActions(item, true)}</div>
+                </article>
+              );
+            }) : null}
+            {!listingsLoading && !listingsError && filteredMyListings.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-500">Không có tin phù hợp bộ lọc.</p>
+            ) : null}
+          </div>
+          <div className="mt-4 hidden overflow-x-auto md:block">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
@@ -1664,10 +1869,7 @@ export default function AccountHomePage() {
               <tbody>
                 {filteredMyListings.map((item) => {
                   const dealType = resolveListingDealType(item);
-                  const options = statusOptionsForListing(item);
-                  const detailPath = buildListingPath({ slug: item.slug, title: item.title, categoryHint: dealType });
-                  const canEdit = isListingEditable(item.createdAt);
-                  const editDeadline = formatEditDeadline(item.createdAt);
+                  const detailPath = userListingPath(item);
                   return (
                     <tr key={item.id} className="border-t border-slate-100 align-top">
                       <td className="px-3 py-2 text-slate-600">{item.id}</td>
@@ -1683,57 +1885,12 @@ export default function AccountHomePage() {
                       </td>
                       <td className="px-3 py-2 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString('vi-VN')}</td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {item.status === 'ACTIVE' && item.slug.trim() ? (
-                            <button
-                              type="button"
-                              className="h-9 shrink-0 rounded border border-sky-300 px-3 text-sm font-semibold text-sky-700 hover:bg-sky-50"
-                              onClick={() => focusSocialListing(item)}
-                            >
-                              Chia sẻ
-                            </button>
-                          ) : null}
-                          {canEdit ? (
-                            <button
-                              type="button"
-                              className="h-9 shrink-0 rounded border border-slate-300 px-3 text-sm text-slate-700 hover:bg-slate-50"
-                              onClick={() => void openEditListing(item)}
-                            >
-                              Sửa
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-500">Hết hạn sửa (đến {editDeadline})</span>
-                          )}
-                          <select
-                            className="h-9 w-[118px] shrink-0 rounded border border-slate-300 px-2 text-sm"
-                            value={statusById[item.id] ?? item.status}
-                            onChange={(event) => setStatusById((prev) => ({ ...prev, [item.id]: event.target.value }))}
-                          >
-                            {options.map((option) => (
-                              <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="h-9 shrink-0 rounded bg-[var(--brand-primary)] px-3 text-sm font-semibold text-white"
-                            onClick={() => void updateMyListingStatus(item)}
-                          >
-                            Cập nhật
-                          </button>
-                          <button
-                            type="button"
-                            className="h-9 shrink-0 rounded border border-red-300 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
-                            onClick={() => void deleteListing(item)}
-                            disabled={deletingListingId === item.id}
-                          >
-                            {deletingListingId === item.id ? 'Đang xóa...' : 'Xóa'}
-                          </button>
-                        </div>
+                        {renderListingActions(item)}
                       </td>
                     </tr>
                   );
                 })}
-                {filteredMyListings.length === 0 ? (
+                {!listingsLoading && !listingsError && filteredMyListings.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-3 py-6 text-center text-slate-500">Không có tin phù hợp bộ lọc.</td>
                   </tr>
@@ -1744,9 +1901,12 @@ export default function AccountHomePage() {
         </article>
 
         {editingDraft ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-            <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-              <h3 className="text-lg font-semibold text-slate-900">Sửa tin #{editingDraft.id}</h3>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-0 sm:p-4">
+            <div ref={editDialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-listing-title" tabIndex={-1} className="h-full max-h-full w-full max-w-4xl overflow-y-auto border border-slate-200 bg-white p-4 shadow-xl outline-none sm:h-auto sm:max-h-[92vh] sm:rounded-xl">
+              <div className="flex items-start justify-between gap-3">
+                <h3 id="edit-listing-title" className="text-lg font-semibold text-slate-900">Sửa tin #{editingDraft.id}</h3>
+                <button type="button" className="min-h-11 min-w-11 rounded border border-slate-300 text-sm font-semibold text-slate-700" onClick={() => setEditingDraft(null)} disabled={savingEdit} aria-label="Đóng cửa sổ sửa tin">X</button>
+              </div>
               <p className="mt-1 text-xs text-slate-500">Chỉ có thể sửa trong {USER_LISTING_EDIT_WINDOW_DAYS} ngày từ ngày đăng.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <input className="rounded border border-slate-300 px-3 py-2 sm:col-span-2" value={editingDraft.title} onChange={(e) => setEditingDraft((prev) => (prev ? { ...prev, title: e.target.value } : prev))} placeholder="Tiêu đề" />
@@ -1880,7 +2040,7 @@ export default function AccountHomePage() {
                   <p className="mt-2 text-xs text-slate-500">Tin đăng cần ít nhất 1 ảnh.</p>
                 )}
               </div>
-              <div className="mt-4 flex justify-end gap-2">
+              <div className="sticky bottom-0 -mx-4 mt-4 flex justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3">
                 <button type="button" className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700" onClick={() => setEditingDraft(null)} disabled={savingEdit}>Hủy</button>
                 <button type="button" className="rounded bg-[var(--brand-primary)] px-3 py-2 text-sm text-white disabled:opacity-60" onClick={() => void saveListingEdit()} disabled={savingEdit}>{savingEdit ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
               </div>
