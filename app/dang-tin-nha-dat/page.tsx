@@ -286,8 +286,8 @@ function isExpiredSessionError(errorText: string | undefined): boolean {
 export default function PostListingDanangPage() {
   const [status, setStatus] = useState<{ tone: StatusTone; message: string } | null>(null);
   const [user, setUser] = useState<AuthUser | null>(() => readAuthUser());
-  const [identifier, setIdentifier] = useState('testuser@nhadatdn.local');
-  const [password, setPassword] = useState('Test@123456');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [packageType, setPackageType] = useState<'NORMAL' | 'VIP'>('NORMAL');
   const [dealType, setDealType] = useState<'can-ban' | 'can-mua' | 'cho-thue'>('can-ban');
   const [houseDirection, setHouseDirection] = useState('');

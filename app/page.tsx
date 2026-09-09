@@ -25,28 +25,28 @@ export async function generateMetadata({
   return {
     title: homepageTitle,
     description:
-      'Mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng cáº­p nháº­t liÃªn tá»¥c: lá»c theo phÆ°á»ng/xÃ£, giÃ¡, diá»‡n tÃ­ch, loáº¡i hÃ¬nh vÃ  xem tin má»›i nháº¥t theo thá»i gian thá»±c.',
+      'Mua bán nhà đất Đà Nẵng cập nhật liên tục: lọc theo phường/xã, giá, diện tích, loại hình và xem tin mới nhất theo thời gian thực.',
     keywords: [
-      'nhÃ  Ä‘áº¥t ÄÃ  Náºµng',
-      'mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng',
-      'báº¥t Ä‘á»™ng sáº£n ÄÃ  Náºµng',
-      'tin Ä‘Äƒng nhÃ  Ä‘áº¥t ÄÃ  Náºµng',
-      'nhÃ  Ä‘áº¥t Háº£i ChÃ¢u',
-      'nhÃ  Ä‘áº¥t SÆ¡n TrÃ ',
+      'nhà đất Đà Nẵng',
+      'mua bán nhà đất Đà Nẵng',
+      'bất động sản Đà Nẵng',
+      'tin đăng nhà đất Đà Nẵng',
+      'nhà đất Hải Châu',
+      'nhà đất Sơn Trà',
     ],
     openGraph: {
       title: homepageTitle,
       description:
-        'TÃ¬m nhanh nhÃ  Ä‘áº¥t ÄÃ  Náºµng theo phÆ°á»ng/xÃ£ má»›i nháº¥t, giÃ¡, diá»‡n tÃ­ch vÃ  loáº¡i hÃ¬nh. Dá»¯ liá»‡u cáº­p nháº­t realtime.',
+        'Tìm nhanh nhà đất Đà Nẵng theo phường/xã mới nhất, giá, diện tích và loại hình. Dữ liệu cập nhật realtime.',
       url: toAbsoluteUrl('/'),
       type: 'website',
-      images: [{ url: toAbsoluteUrl('/logo-nhadatdn.svg'), width: 512, height: 512, alt: 'Mua bÃ¡n nhÃ  Ä‘áº¥t ÄÃ  Náºµng' }],
+      images: [{ url: toAbsoluteUrl('/logo-nhadatdn.svg'), width: 512, height: 512, alt: 'Mua bán nhà đất Đà Nẵng' }],
     },
     twitter: {
       card: 'summary_large_image',
       title: homepageTitle,
       description:
-        'TÃ¬m nhanh nhÃ  Ä‘áº¥t ÄÃ  Náºµng theo phÆ°á»ng/xÃ£ má»›i nháº¥t, giÃ¡, diá»‡n tÃ­ch vÃ  loáº¡i hÃ¬nh. Dá»¯ liá»‡u cáº­p nháº­t realtime.',
+        'Tìm nhanh nhà đất Đà Nẵng theo phường/xã mới nhất, giá, diện tích và loại hình. Dữ liệu cập nhật realtime.',
       images: [toAbsoluteUrl('/logo-nhadatdn.svg')],
     },
   };
@@ -114,14 +114,14 @@ export default async function HomePage({
   const itemListJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
-    name: 'Tin nhÃ  Ä‘áº¥t ÄÃ  Náºµng má»›i nháº¥t',
+    name: 'Tin nhà đất Đà Nẵng mới nhất',
     itemListElement: latestForSeo.map((item, index) => {
       const image = resolveSeoImageUrls(item)[0];
       const itemUrl = toAbsoluteUrl(
         buildListingPath({
           slug: item.slug,
           title: item.title,
-          district: item.district || 'ÄÃ  Náºµng',
+          district: item.district || 'Đà Nẵng',
           categoryHint: (item.dealType ?? item.DealType ?? '').toString(),
         }),
       );
@@ -130,10 +130,10 @@ export default async function HomePage({
         '@type': 'ListItem',
         position: (currentPage - 1) * 20 + index + 1,
         url: itemUrl,
-        name: normalizeSeoText(item.title || 'Tin nhÃ  Ä‘áº¥t ÄÃ  Náºµng'),
+        name: normalizeSeoText(item.title || 'Tin nhà đất Đà Nẵng'),
         item: {
           '@type': 'RealEstateListing',
-          name: normalizeSeoText(item.title || 'Tin nhÃ  Ä‘áº¥t ÄÃ  Náºµng'),
+          name: normalizeSeoText(item.title || 'Tin nhà đất Đà Nẵng'),
           url: itemUrl,
           publisher: publisherSchema,
           mainEntityOfPage: { '@type': 'WebPage', '@id': itemUrl },

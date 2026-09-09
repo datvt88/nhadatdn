@@ -1,6 +1,9 @@
 ﻿import type { MetadataRoute } from 'next';
+import { getSiteUrl } from '../lib/seo';
 
 export default function robots(): MetadataRoute.Robots {
+  const siteUrl = getSiteUrl();
+
   return {
     rules: [
       {
@@ -8,12 +11,8 @@ export default function robots(): MetadataRoute.Robots {
         allow: '/',
       },
     ],
-    sitemap: [
-      'https://nhadatdn.net/sitemap.xml',
-      'https://nhadatdn.net/sitemap-cities.xml',
-      'https://nhadatdn.net/sitemap-districts.xml',
-      'https://nhadatdn.net/sitemap-listings.xml',
-    ],
-    host: 'https://nhadatdn.net',
+    sitemap: [`${siteUrl}/sitemap.xml`],
+    host: siteUrl,
   };
 }
+
