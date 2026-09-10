@@ -32,9 +32,26 @@ function deriveServerApiBase(publicApiBase: string): string {
     return trimTrailingSlash(publicApiBase);
   }
 
+  // Goi thang backend qua API_PROXY_ORIGIN thay vi vong lai qua chinh domain cua minh.
+  //
+  // Truoc day nhanh nay tra ve `https://nhadatdn.net/api`, tuc la ham SSR/ISR tren
+  // Vercel phai goi nguoc ve domain public cua chinh no roi moi qua rewrite -> tunnel
+  // -> may local. Luc build/regenerate, cu goi vong nay hay that bai, va vi fetchJsonOr
+  // nuot loi nen ket qua la sitemap sinh ra RONG ma khong bao gi. Da quan sat that:
+  // sau khi deploy sitemap dong, /sitemap.xml van chi co 4 URL tinh.
+  //
+  // API_PROXY_ORIGIN chinh la origin backend that (https://api.nhadatdn.net tren Vercel,
+  // http://public-api:3002 khi chay frontend trong docker), nen dung no vua dung vua
+  // bot mot chang mang.
+  const proxyOrigin = trimTrailingSlash(process.env.API_PROXY_ORIGIN?.trim() ?? '');
+  const normalizedBase = publicApiBase.startsWith('/') ? publicApiBase : `/${publicApiBase}`;
+  if (proxyOrigin && isAbsoluteHttpUrl(proxyOrigin)) {
+    const proxyBasePath = trimTrailingSlash(process.env.API_PROXY_BASE_PATH?.trim() ?? '') || trimTrailingSlash(normalizedBase);
+    return `${proxyOrigin}${proxyBasePath}`;
+  }
+
   const siteOrigin = deriveSiteOrigin();
   if (siteOrigin) {
-    const normalizedBase = publicApiBase.startsWith('/') ? publicApiBase : `/${publicApiBase}`;
     return `${siteOrigin}${trimTrailingSlash(normalizedBase)}`;
   }
 
