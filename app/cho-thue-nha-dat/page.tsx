@@ -1,5 +1,4 @@
-﻿import type { Metadata } from 'next';
-import Head from 'next/head';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { HeaderNav } from '../../components/header-nav';
 import { SearchListingFeed } from '../../components/search-listing-feed';
@@ -105,10 +104,6 @@ export default async function RentCategoryPage({
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#eef8f8_0%,_#f6fbfb_35%,_#ffffff_100%)]">
-      <Head>
-        {prevHref ? <link rel="prev" href={prevHref} /> : null}
-        {nextHref ? <link rel="next" href={nextHref} /> : null}
-      </Head>
       <HeaderNav />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd).replace(/</g, '\\u003c') }} />
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6">

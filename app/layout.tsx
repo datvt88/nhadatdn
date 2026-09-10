@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { fetchJsonOr } from '../lib/api';
 import { getSiteUrl } from '../lib/seo';
+import { buildSiteEntityGraph } from '../lib/site-schema';
 
 type GlobalGoogleTagConfig = {
   enabled?: boolean;
@@ -79,6 +80,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="vi">
       <body className={montserrat069ab3.variable}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: buildSiteEntityGraph() }}
+        />
         {googleTagEnabled ? <GlobalGoogleTag googleTagId={googleTagId} /> : null}
         {children}
       </body>

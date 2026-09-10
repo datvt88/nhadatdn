@@ -10,6 +10,8 @@ import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '@/
 import { formatAreaM2, formatListingPrice, formatPricePerM2, resolveListingCreatedAt, resolveListingUpdatedAt, resolveSeoImageUrls, type ListingImageLike } from '@/lib/listing-presenter';
 import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '@/lib/listing-route';
 import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '@/lib/seo';
+import { organizationRef } from '@/lib/site-schema';
+import { buildListingFacets, buildListingPropertyValues, buildOfferSchema, buildPostalAddress } from '@/lib/listing-schema';
 import type { ListingItem } from '@/lib/types';
 
 export const revalidate = 60;
@@ -310,21 +312,31 @@ export default async function ListingDetailPage({ params }: { params: { dealType
       ? toAbsoluteUrl(`/nguoi-dang/${encodeURIComponent(String(sellerUserId))}`)
       : undefined;
   const sellerBioPath = sellerUserId > 0 ? `/nguoi-dang/${sellerUserId}` : '';
-  const publisherSchema = {
-    '@type': 'Organization',
-    name: 'NhadatDN',
-    url: siteUrl,
-    logo: {
-      '@type': 'ImageObject',
-      url: toAbsoluteUrl('/logo-nhadatdn.svg'),
-    },
-  };
   const sellerSchema = {
     '@type': 'Person',
     name: contactName,
     ...(sellerPublicUrl ? { url: sellerPublicUrl } : {}),
     ...(sellerUserId > 0 ? { identifier: String(sellerUserId) } : {}),
   };
+
+  const offerSchema = buildOfferSchema(listing.price, canonicalDealType);
+  const postalAddress = buildPostalAddress(String(listing.address ?? ''), wardName, locationLabel);
+  const listingFacets = buildListingFacets({
+    area: listing.area,
+    bedrooms: listing.bedrooms,
+    bathrooms: listing.bathrooms,
+    lat: (listing as { lat?: unknown }).lat,
+    lng: (listing as { lng?: unknown }).lng,
+  });
+  const listingProperties = [
+    ...(isVerifiedSeller ? [{ '@type': 'PropertyValue', name: 'sellerVerified', value: 'true' }] : []),
+    ...buildListingPropertyValues({
+      floors: listing.floors,
+      houseDirection: listing.houseDirection ?? listing.HouseDirection,
+      frontage: listing.frontage,
+      roadWidth: listing.roadWidth,
+    }),
+  ];
 
   const jsonLdListing = {
     '@context': 'https://schema.org',
@@ -347,24 +359,19 @@ export default async function ListingDetailPage({ params }: { params: { dealType
     ...(modifiedAt ? { dateModified: modifiedAt } : {}),
     author: sellerSchema,
     seller: sellerSchema,
-    publisher: publisherSchema,
+    publisher: organizationRef(),
     mainEntityOfPage: {
       '@type': 'WebPage',
       '@id': listingAbsoluteUrl,
     },
-    ...(isVerifiedSeller
-      ? {
-          additionalProperty: [
-            {
-              '@type': 'PropertyValue',
-              name: 'sellerVerified',
-              value: 'true',
-            },
-          ],
-        }
-      : {}),
-    offers: { '@type': 'Offer', priceCurrency: 'VND', price: Number(listing.price), availability: 'https://schema.org/InStock' },
-    address: { '@type': 'PostalAddress', streetAddress: listing.address, addressLocality: toLocation(listing) },
+    // Gia trong DB theo don vi "ty" (ban) hoac "trieu/thang" (thue). Truoc day cho
+    // thang so tho vao `price` kem `priceCurrency: 'VND'`, nen mot can 5,5 ty duoc
+    // khai bao voi Google la 5,5 dong. buildOfferSchema() quy doi ra VND va danh dau
+    // ro tin thue la gia theo thang.
+    ...(offerSchema ? { offers: offerSchema } : {}),
+    address: postalAddress ?? { '@type': 'PostalAddress', streetAddress: listing.address, addressLocality: toLocation(listing) },
+    ...listingFacets,
+    ...(listingProperties.length > 0 ? { additionalProperty: listingProperties } : {}),
   };
   const jsonLdBreadcrumb = {
     '@context': 'https://schema.org',

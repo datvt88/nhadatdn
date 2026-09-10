@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
-import Head from 'next/head';
 import { HeaderNav } from '../components/header-nav';
 import { HomeRealtime } from '../components/home-realtime';
 import { fetchJsonOr } from '../lib/api';
 import { resolveListingCreatedAt, resolveSeoImageUrls } from '../lib/listing-presenter';
 import { buildPagePath, parsePositivePage } from '../lib/pagination-seo';
 import { buildListingPath } from '../lib/listing-route';
-import { getSiteUrl, normalizeSeoText, toAbsoluteUrl } from '../lib/seo';
+import { normalizeSeoText, toAbsoluteUrl } from '../lib/seo';
+import { organizationRef } from '../lib/site-schema';
 import type { SearchResponse } from '../lib/types';
 
 type WardOption = { name: string; slug: string };
@@ -22,8 +22,14 @@ export async function generateMetadata({
   searchParams?: { page?: string };
 }): Promise<Metadata> {
   const homepageTitle = 'Mua bán nhà đất Đà Nẵng | Kết nối chính chủ, có sổ đỏ';
+  // Canonical phai khai bao o day. Truoc day trang chu dat <link rel="canonical">
+  // qua `next/head`, ma API do khong co tac dung trong App Router - ket qua la
+  // trang chu chay tren production hoan toan khong co the canonical nao.
+  const currentPage = parsePositivePage(searchParams?.page);
+  const canonical = buildPagePath('/', currentPage);
   return {
     title: homepageTitle,
+    alternates: { canonical },
     description:
       'Mua bán nhà đất Đà Nẵng cập nhật liên tục: lọc theo phường/xã, giá, diện tích, loại hình và xem tin mới nhất theo thời gian thực.',
     keywords: [
@@ -82,34 +88,7 @@ export default async function HomePage({
 
   const listings = Array.isArray(listingPayload.items) ? listingPayload.items : [];
   const total = Number.isFinite(Number(listingPayload.total)) ? Number(listingPayload.total) : listings.length;
-  const totalPages = Math.max(1, Math.ceil(Math.max(total, listings.length) / 20));
-  const siteUrl = getSiteUrl();
-  const canonicalPath = buildPagePath('/', currentPage);
-  const canonicalUrl = toAbsoluteUrl(canonicalPath);
-  const prevHref = currentPage > 1 ? toAbsoluteUrl(buildPagePath('/', currentPage - 1)) : null;
-  const nextHref = currentPage < totalPages ? toAbsoluteUrl(buildPagePath('/', currentPage + 1)) : null;
   const latestForSeo = listings.slice(0, 12);
-
-  const webSiteJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'WebSite',
-    name: 'NhadatDN',
-    url: siteUrl,
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: `${siteUrl}/mua-ban-nha-dat?q={search_term_string}`,
-      'query-input': 'required name=search_term_string',
-    },
-  };
-  const publisherSchema = {
-    '@type': 'Organization',
-    name: 'NhadatDN',
-    url: siteUrl,
-    logo: {
-      '@type': 'ImageObject',
-      url: toAbsoluteUrl('/logo-nhadatdn.svg'),
-    },
-  };
 
   const itemListJsonLd = {
     '@context': 'https://schema.org',
@@ -135,7 +114,7 @@ export default async function HomePage({
           '@type': 'RealEstateListing',
           name: normalizeSeoText(item.title || 'Tin nhà đất Đà Nẵng'),
           url: itemUrl,
-          publisher: publisherSchema,
+          publisher: organizationRef(),
           mainEntityOfPage: { '@type': 'WebPage', '@id': itemUrl },
           ...(image ? { image } : {}),
           ...(publishedAt ? { datePublished: publishedAt, datePosted: publishedAt } : {}),
@@ -144,15 +123,10 @@ export default async function HomePage({
     }),
   };
 
-  const jsonLdString = JSON.stringify([webSiteJsonLd, itemListJsonLd]).replace(/</g, '\u003c');
+  const jsonLdString = JSON.stringify(itemListJsonLd).replace(/</g, '\u003c');
 
   return (
     <>
-      <Head>
-        <link rel="canonical" href={canonicalUrl} />
-        {prevHref ? <link rel="prev" href={prevHref} /> : null}
-        {nextHref ? <link rel="next" href={nextHref} /> : null}
-      </Head>
       <HeaderNav />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString }} />
       <HomeRealtime
