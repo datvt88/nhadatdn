@@ -87,5 +87,5 @@ export function buildSiteEntityGraph(): string {
   return JSON.stringify({
     '@context': 'https://schema.org',
     '@graph': [buildOrganizationSchema(), buildWebSiteSchema()],
-  }).replace(/</g, '\u003c');
+  }).replace(/</g, '\\u003c');
 }

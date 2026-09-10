@@ -123,7 +123,7 @@ export default async function HomePage({
     }),
   };
 
-  const jsonLdString = JSON.stringify(itemListJsonLd).replace(/</g, '\u003c');
+  const jsonLdString = JSON.stringify(itemListJsonLd).replace(/</g, '\\u003c');
 
   return (
     <>

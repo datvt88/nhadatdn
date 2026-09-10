@@ -9,6 +9,10 @@ import { buildPagePath, parsePositivePage } from '../../../lib/pagination-seo';
 import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, slugifyVietnamese, type DealType } from '../../../lib/listing-route';
 import { normalizeSeoText, toAbsoluteUrl } from '../../../lib/seo';
 import type { SearchResponse } from '../../../lib/types';
+import { organizationRef } from '../../../lib/site-schema';
+import { buildBreadcrumbSchema } from '../../../lib/breadcrumb-schema';
+import { buildCategoryFacts } from '../../../lib/category-facts';
+import { CategoryFacts } from '../../../components/category-facts';
 
 export const revalidate = 60;
 
@@ -134,20 +138,8 @@ export default async function DealTypeLocationPage({
     { next: { revalidate: 30 } },
   );
   const latestForSeo = (payload.items ?? []).slice(0, 20);
-  const totalPages = Math.max(1, Math.ceil(Math.max(Number(payload.total ?? 0), (payload.items ?? []).length) / 20));
-  const prevHref = currentPage > 1 ? toAbsoluteUrl(buildPagePath(expectedPath, currentPage - 1)) : null;
-  const nextHref = currentPage < totalPages ? toAbsoluteUrl(buildPagePath(expectedPath, currentPage + 1)) : null;
-  const publisherSchema = {
-    '@type': 'Organization',
-    name: 'NhadatDN',
-    url: toAbsoluteUrl('/'),
-    logo: {
-      '@type': 'ImageObject',
-      url: toAbsoluteUrl('/logo-nhadatdn.svg'),
-    },
-  };
-
   const heading = dealType === 'cho-thue' ? `Cho thuê nhà đất ${district.name}, Đà Nẵng` : `Mua bán nhà đất ${district.name}, Đà Nẵng`;
+
   const itemListJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
@@ -172,7 +164,7 @@ export default async function DealTypeLocationPage({
           '@type': 'RealEstateListing',
           name: normalizeSeoText(item.title || heading),
           url: itemUrl,
-          publisher: publisherSchema,
+          publisher: organizationRef(),
           mainEntityOfPage: { '@type': 'WebPage', '@id': itemUrl },
           ...(image ? { image } : {}),
           ...(publishedAt ? { datePublished: publishedAt, datePosted: publishedAt } : {}),
@@ -181,10 +173,23 @@ export default async function DealTypeLocationPage({
     }),
   };
 
+  const categoryLabel = dealType === 'cho-thue' ? 'Cho thuê nhà đất Đà Nẵng' : 'Mua bán nhà đất Đà Nẵng';
+  const breadcrumbJsonLd = buildBreadcrumbSchema([
+    { name: 'NhadatDN', path: '/' },
+    { name: categoryLabel, path: canonicalCategoryPath },
+    { name: district.name, path: expectedPath },
+  ]);
+  const categoryFacts = buildCategoryFacts(payload.items ?? [], {
+    total: Number(payload.total ?? 0),
+    dealType,
+    areaLabel: district.name,
+    categoryLabel: `${categoryLabel.toLowerCase()} tại ${district.name}`,
+  });
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#eef8f8_0%,_#f6fbfb_35%,_#ffffff_100%)]">
       <HeaderNav />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd).replace(/</g, '\\u003c') }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify([breadcrumbJsonLd, itemListJsonLd]).replace(/</g, '\\u003c') }} />
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
           <Link href="/" className="hover:text-[var(--brand-primary-hover)] hover:underline">NhadatDN</Link>
@@ -213,6 +218,8 @@ export default async function DealTypeLocationPage({
             basePath={expectedPath}
           />
         </div>
+
+        <CategoryFacts facts={categoryFacts} heading={`Câu hỏi thường gặp về nhà đất ${district.name}`} />
       </section>
     </main>
   );

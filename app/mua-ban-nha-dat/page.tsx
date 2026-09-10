@@ -9,6 +9,10 @@ import { buildListingPath } from '../../lib/listing-route';
 import { normalizeSeoText } from '../../lib/seo';
 import { toAbsoluteUrl } from '../../lib/seo';
 import type { SearchResponse } from '../../lib/types';
+import { organizationRef } from '../../lib/site-schema';
+import { buildBreadcrumbSchema } from '../../lib/breadcrumb-schema';
+import { buildCategoryFacts } from '../../lib/category-facts';
+import { CategoryFacts } from '../../components/category-facts';
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -57,18 +61,6 @@ export default async function SaleCategoryPage({
     { cache: 'no-store' },
   );
   const latestForSeo = (payload.items ?? []).slice(0, 20);
-  const totalPages = Math.max(1, Math.ceil(Math.max(Number(payload.total ?? 0), (payload.items ?? []).length) / 20));
-  const prevHref = currentPage > 1 ? toAbsoluteUrl(buildPagePath('/mua-ban-nha-dat', currentPage - 1, pageQuery)) : null;
-  const nextHref = currentPage < totalPages ? toAbsoluteUrl(buildPagePath('/mua-ban-nha-dat', currentPage + 1, pageQuery)) : null;
-  const publisherSchema = {
-    '@type': 'Organization',
-    name: 'NhadatDN',
-    url: toAbsoluteUrl('/'),
-    logo: {
-      '@type': 'ImageObject',
-      url: toAbsoluteUrl('/logo-nhadatdn.svg'),
-    },
-  };
   const itemListJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
@@ -93,7 +85,7 @@ export default async function SaleCategoryPage({
           '@type': 'RealEstateListing',
           name: normalizeSeoText(item.title || 'Tin mua bán nhà đất Đà Nẵng'),
           url: itemUrl,
-          publisher: publisherSchema,
+          publisher: organizationRef(),
           mainEntityOfPage: { '@type': 'WebPage', '@id': itemUrl },
           ...(image ? { image } : {}),
           ...(publishedAt ? { datePublished: publishedAt, datePosted: publishedAt } : {}),
@@ -102,10 +94,21 @@ export default async function SaleCategoryPage({
     }),
   };
 
+  const breadcrumbJsonLd = buildBreadcrumbSchema([
+    { name: 'NhadatDN', path: '/' },
+    { name: 'Mua bán nhà đất Đà Nẵng', path: '/mua-ban-nha-dat' },
+  ]);
+  const categoryFacts = buildCategoryFacts(payload.items ?? [], {
+    total: Number(payload.total ?? 0),
+    dealType: 'can-ban',
+    areaLabel: 'Đà Nẵng',
+    categoryLabel: 'danh mục mua bán nhà đất Đà Nẵng',
+  });
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#eef8f8_0%,_#f6fbfb_35%,_#ffffff_100%)]">
       <HeaderNav />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd).replace(/</g, '\\u003c') }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify([breadcrumbJsonLd, itemListJsonLd]).replace(/</g, '\\u003c') }} />
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
           <Link href="/" className="hover:text-[var(--brand-primary-hover)] hover:underline">NhadatDN</Link>
@@ -136,6 +139,8 @@ export default async function SaleCategoryPage({
             pageQuery={pageQuery}
           />
         </div>
+
+        <CategoryFacts facts={categoryFacts} heading="Câu hỏi thường gặp về mua bán nhà đất Đà Nẵng" />
       </section>
     </main>
   );
