@@ -69,10 +69,13 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Cache 5 phut thay vi no-store. Truoc day no-store trong root layout ep MOI trang render dong
+  // (khong the ISR), gop phan lam TTFB trang chu ~2,1s va khien ca site phu thuoc backend tai nha
+  // cho tung luot xem. Cau hinh tag toan site thay doi rat it nen 5 phut la du tuoi.
   const trackingConfig = await fetchJsonOr<GlobalGoogleTagConfig>(
     '/tracking/global',
     { enabled: false, googleTagId: '' },
-    { cache: 'no-store' },
+    { next: { revalidate: 300 } },
   );
   const googleTagId = typeof trackingConfig.googleTagId === 'string' ? trackingConfig.googleTagId.trim() : '';
   const googleTagEnabled = Boolean(trackingConfig.enabled) && googleTagId.length > 0;

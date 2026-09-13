@@ -1,11 +1,11 @@
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { HeaderNav } from '@/components/header-nav';
 import { ListingDetailActions } from '@/components/listing-detail-actions';
 import { ListingImageGallery } from '@/components/listing-image-gallery';
 import { SellerRatingPanel } from '@/components/seller-rating-panel';
-import { fetchJsonOr } from '@/lib/api';
+import { fetchJsonOrNotFound, NOT_FOUND } from '@/lib/api';
 import { listingStatusLabel, packageBadgeLabel, packageBadgeClassName } from '@/lib/listing-labels';
 import { formatAreaM2, formatListingPrice, formatPricePerM2, resolveListingCreatedAt, resolveListingUpdatedAt, resolveSeoImageUrls, type ListingImageLike } from '@/lib/listing-presenter';
 import { buildListingPath, categoryPathByDealType, dealTypeFromCategorySegment, resolveDealType } from '@/lib/listing-route';
@@ -14,8 +14,10 @@ import { organizationRef } from '@/lib/site-schema';
 import { buildListingFacets, buildListingPropertyValues, buildOfferSchema, buildPostalAddress } from '@/lib/listing-schema';
 import type { ListingItem } from '@/lib/types';
 
-export const revalidate = 60;
-export const dynamic = 'force-dynamic';
+// ISR: trang tin duoc cache va tai sinh moi 5 phut. Bo 'force-dynamic' (no vo hieu hoa revalidate va
+// ep render dong moi request) de khi backend/tunnel/PC gian doan, Next van phuc vu ban tin da cache
+// thay vi trang trong. Cap nhat gan realtime khong quan trong bang viec tin luon truy cap duoc.
+export const revalidate = 300;
 
 type ListingImage = ListingImageLike;
 type ListingDetail = Omit<ListingItem, 'city' | 'district'> & {
@@ -205,14 +207,16 @@ function formatPublishedDate(value?: string): string {
   return `Đăng ngày ${time.toLocaleDateString('vi-VN')}`;
 }
 
-async function getListingBySlug(slug: string): Promise<ListingDetail | null> {
-  return fetchJsonOr<ListingDetail | null>(`/listings/${slug}`, null, { cache: 'no-store' });
+// Tra ve du lieu tin, hoac NOT_FOUND khi backend bao 404. Loi mang/5xx duoc NEM ra ngoai co chu dich:
+// khi do Next giu ban ISR cu (hoac tra 500), thay vi render trang 200 + noindex de len tin that.
+async function getListingBySlug(slug: string): Promise<ListingDetail | typeof NOT_FOUND> {
+  return fetchJsonOrNotFound<ListingDetail>(`/listings/${slug}`, { next: { revalidate: 300 } });
 }
 
 export async function generateMetadata({ params }: { params: { dealType: string; location: string; slug: string } }): Promise<Metadata> {
   const listing = await getListingBySlug(params.slug);
 
-  if (!listing) {
+  if (listing === NOT_FOUND) {
     return {
       title: 'Tin đăng không tồn tại | Mua bán nhà đất Đà Nẵng',
       description: 'Tin đăng không tồn tại hoặc đã ngừng hiển thị.',
@@ -265,13 +269,10 @@ export async function generateMetadata({ params }: { params: { dealType: string;
 
 export default async function ListingDetailPage({ params }: { params: { dealType: string; location: string; slug: string } }) {
   const listing = await getListingBySlug(params.slug);
-  if (!listing) {
-    return (
-      <main>
-        <HeaderNav />
-        <div className="mx-auto max-w-4xl px-6 py-12">Tin đăng không tồn tại hoặc chưa đồng bộ.</div>
-      </main>
-    );
+  // 404 that: tra 404 thuc su qua notFound() (khong con soft-200). Loi backend da duoc getListingBySlug
+  // nem ra tu truoc, nen toi day chi con hai kha nang: co du lieu, hoac tin da bi go that su.
+  if (listing === NOT_FOUND) {
+    notFound();
   }
 
   const wardName = compactLocationPart(listing.ward);

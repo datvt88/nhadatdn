@@ -101,6 +101,25 @@ export async function fetchJsonOr<T>(path: string, fallback: T, init?: RequestIn
   }
 }
 
+// Phan biet 3 truong hop de trang chi tiet KHONG bao giờ tra 200 + noindex cho tin that:
+//  - 'not-found': backend tra 404 -> tin da xoa/an that su, goi notFound() (404 that).
+//  - nem loi: loi mang/5xx (backend/tunnel/PC tam gian doan) -> Next giu ban ISR cu hoac tra 500,
+//    thay vi ghi de bang trang "khong ton tai" co noindex lam Google go tin.
+//  - du lieu: 200 hop le.
+export const NOT_FOUND = Symbol('not-found');
+
+export async function fetchJsonOrNotFound<T>(path: string, init?: RequestInit): Promise<T | typeof NOT_FOUND> {
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const shouldApplyDefaultRevalidate = method === 'GET' && init?.cache !== 'no-store' && init?.next === undefined;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    ...(shouldApplyDefaultRevalidate ? { next: { revalidate: 300 } } : {}),
+  });
+  if (res.status === 404) return NOT_FOUND;
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return (await res.json()) as T;
+}
+
 export async function fetchTextOr(path: string, fallback: string, init?: RequestInit): Promise<string> {
   try {
     const method = init?.method?.toUpperCase() ?? 'GET';

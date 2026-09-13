@@ -1,6 +1,6 @@
 ﻿import type { MetadataRoute } from 'next';
 import { fetchJsonOr } from '../lib/api';
-import { buildListingPath } from '../lib/listing-route';
+import { buildListingPath, resolveLocationSegment } from '../lib/listing-route';
 import { getSiteUrl, toAbsoluteUrl } from '../lib/seo';
 import type { ListingItem, SearchResponse } from '../lib/types';
 
@@ -56,29 +56,41 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     fetchLatestListings('cho-thue'),
   ]);
 
+  // KHONG bo /dang-tin-nha-dat vao sitemap: day la form can dang nhap, khong phai trang noi dung.
   const staticEntries: MetadataRoute.Sitemap = [
     { url: `${siteUrl}/`, lastModified: now, changeFrequency: 'hourly', priority: 1 },
     { url: `${siteUrl}/mua-ban-nha-dat`, lastModified: now, changeFrequency: 'hourly', priority: 0.95 },
     { url: `${siteUrl}/cho-thue-nha-dat`, lastModified: now, changeFrequency: 'hourly', priority: 0.95 },
-    { url: `${siteUrl}/dang-tin-nha-dat`, lastModified: now, changeFrequency: 'daily', priority: 0.6 },
   ];
 
-  const districtEntries: MetadataRoute.Sitemap = districts.flatMap((district) => [
-    {
-      url: `${siteUrl}/mua-ban-nha-dat/nha-dat-${district.slug}`,
-      lastModified: now,
-      changeFrequency: 'hourly',
-      priority: 0.85,
-    },
-    {
-      url: `${siteUrl}/cho-thue-nha-dat/nha-dat-${district.slug}`,
-      lastModified: now,
-      changeFrequency: 'hourly',
-      priority: 0.85,
-    },
-  ]);
-
   const allListings = [...saleListings, ...rentListings];
+
+  // Route [location] chi nhan segment sinh tu TEN phuong (nha-dat-cam-le), roi notFound() voi moi
+  // gia tri khac. Sitemap cu ghep bang district.slug ('px-001') nen 188/411 URL tra 404. Dung chung
+  // helper resolveLocationSegment voi route, va chi xuat phuong ban/thue thuc su co tin de tranh trang mong.
+  const saleSegments = new Set(saleListings.map((item) => resolveLocationSegment(item.district || undefined)));
+  const rentSegments = new Set(rentListings.map((item) => resolveLocationSegment(item.district || undefined)));
+
+  const districtEntries: MetadataRoute.Sitemap = [];
+  for (const district of districts) {
+    const segment = resolveLocationSegment(district.name);
+    if (saleSegments.has(segment)) {
+      districtEntries.push({
+        url: `${siteUrl}/mua-ban-nha-dat/${segment}`,
+        lastModified: now,
+        changeFrequency: 'hourly',
+        priority: 0.85,
+      });
+    }
+    if (rentSegments.has(segment)) {
+      districtEntries.push({
+        url: `${siteUrl}/cho-thue-nha-dat/${segment}`,
+        lastModified: now,
+        changeFrequency: 'hourly',
+        priority: 0.85,
+      });
+    }
+  }
   const seen = new Set<string>();
   const listingEntries: MetadataRoute.Sitemap = [];
 
