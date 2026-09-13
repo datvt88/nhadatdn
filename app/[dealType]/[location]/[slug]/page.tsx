@@ -289,7 +289,10 @@ export default async function ListingDetailPage({ params }: { params: { dealType
   const mapQuery = buildMapQuery(listing);
   const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&hl=vi&z=16&output=embed`;
   const mapExternalUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
-  const phone = listing.contact?.phone ?? '0900 000 000';
+  // KHONG dung so mac dinh gia (truoc day '0900 000 000' - co the la so that cua nguoi khac,
+  // gay lien he nham). Chi hien nut goi/Zalo khi nguoi dang co so dien thoai that.
+  const phoneRaw = String(listing.contact?.phone ?? '').trim();
+  const hasPhone = phoneRaw.replace(/\D+/g, '').length >= 8;
   const contactName = listing.contact?.fullName ?? 'Người đăng tin';
   const isVerifiedSeller = Boolean(listing.contact?.verified);
   const sellerLabel = isVerifiedSeller ? 'Người bán đã xác thực' : 'Người bán mới';
@@ -504,24 +507,39 @@ export default async function ListingDetailPage({ params }: { params: { dealType
               </div>
               {sellerUserId > 0 ? <SellerRatingPanel sellerUserId={sellerUserId} completedLabel={completedLabel} /> : null}
             </div>
-            <a
-              href={`https://zalo.me/${phone.replace(/\D+/g, '')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-            >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-sky-100 text-[10px] font-bold text-sky-700">Zalo</span>
-              <span>Chat qua Zalo</span>
-            </a>
-            <a
-              href={`tel:${phone.replace(/\s+/g, '')}`}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#10979b] to-[var(--brand-primary)] px-3 py-3 text-sm font-bold text-white shadow-sm"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24 11.2 11.2 0 0 0 3.52.56 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.3 21 3 13.7 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.22.2 2.4.56 3.52a1 1 0 0 1-.25 1.02l-2.2 2.25z" />
-              </svg>
-              <span>{phone} • Hiện số</span>
-            </a>
+            {hasPhone ? (
+              <>
+                <a
+                  href={`https://zalo.me/${phoneRaw.replace(/\D+/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-sky-100 text-[10px] font-bold text-sky-700">Zalo</span>
+                  <span>Chat qua Zalo</span>
+                </a>
+                <a
+                  href={`tel:${phoneRaw.replace(/\s+/g, '')}`}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#10979b] to-[var(--brand-primary)] px-3 py-3 text-sm font-bold text-white shadow-sm"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                    <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24 11.2 11.2 0 0 0 3.52.56 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.3 21 3 13.7 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.22.2 2.4.56 3.52a1 1 0 0 1-.25 1.02l-2.2 2.25z" />
+                  </svg>
+                  <span>{phoneRaw} • Hiện số</span>
+                </a>
+              </>
+            ) : sellerUserId > 0 ? (
+              <Link
+                href={`/nguoi-dang/${sellerUserId}` as Route}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#10979b] to-[var(--brand-primary)] px-3 py-3 text-sm font-bold text-white shadow-sm"
+              >
+                <span>Xem trang người đăng để liên hệ</span>
+              </Link>
+            ) : (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-center text-sm text-slate-500">
+                Người đăng chưa cung cấp số điện thoại.
+              </p>
+            )}
             {sellerUserId > 0 ? (
               <Link
                 href={{ pathname: canonicalCategoryPath, query: { posterId: String(sellerUserId), posterName: contactName } }}
